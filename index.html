@@ -28,7 +28,7 @@
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         @keyframes coinFlip { 0% { transform: rotateY(0deg) scale(1); } 50% { transform: rotateY(900deg) scale(1.5); } 100% { transform: rotateY(1800deg) scale(1); } }
         .coin-flip-anim { animation: coinFlip 1.5s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
-        .mobile-container { min-height: 100dvh; background-color: #020617; color: #f1f5f9; user-select: none; touch-action: manipulation; overscroll-behavior: none; padding-bottom: env(safe-area-inset-bottom); overflow-x: hidden; display: flex; flex-direction: column; }
+        .app-container { min-height: 100dvh; background-color: #020617; color: #f1f5f9; user-select: none; touch-action: manipulation; overscroll-behavior: none; padding-bottom: env(safe-area-inset-bottom); overflow-x: hidden; display: flex; flex-direction: column; }
     </style>
 </head>
 <body>
@@ -100,11 +100,10 @@
             }
         };
 
-        // State Updater Funktion (löst Rerender aus)
+        // State Updater Funktion
         function setState(updates) {
             state = { ...state, ...updates };
             
-            // Speichere persistente Daten
             const { isDbLoaded, errorMsg, currentDarts, inputMultiplier, isCoinFlipping, turnNotification, ...persistentState } = state;
             if (state.isDbLoaded) dbHelper.save(persistentState);
             
@@ -214,7 +213,7 @@
         };
 
         // ==========================================
-        // 4. EVENTS & ACTIONS (Global gebunden für onclick)
+        // 4. EVENTS & ACTIONS
         // ==========================================
         window.setAppMode = (m) => setState({appMode: m});
         window.setGameMode = (m) => setState({gameMode: m});
@@ -230,9 +229,8 @@
             const input = document.getElementById('newPlayerInput');
             if (input && input.value.trim() !== '') {
                 const newPlayers = [...state.players, { id: crypto.randomUUID(), name: input.value.trim() }];
+                input.value = ''; // Feld VOR dem Rerender leeren
                 setState({ players: newPlayers, errorMsg: '' });
-                // Fokus wiederherstellen nach Render
-                setTimeout(() => document.getElementById('newPlayerInput')?.focus(), 10);
             }
         };
 
@@ -390,7 +388,7 @@
 
             const activeGame = state.activeGame;
             const currentPlayer = activeGame.players[activeGame.currentPlayerIndex];
-            const playerToUpdate = JSON.parse(JSON.stringify(currentPlayer)); // Deep copy for logic
+            const playerToUpdate = JSON.parse(JSON.stringify(currentPlayer)); 
 
             let tempScore = playerToUpdate.score;
             let isBust = false;
@@ -508,16 +506,24 @@
         };
 
         // ==========================================
-        // 5. RENDER SYSTEM (Template Literals)
+        // 5. RENDER SYSTEM
         // ==========================================
-        const mobileContainerClasses = "mobile-container";
-        const playerColors = ['#38bdf8', '#facc15', '#fb7185', '#a78bfa'];
-        const wedgeAngles = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
+        const appContainerClasses = "app-container";
 
         function render() {
             if (!state.isDbLoaded) return;
             const root = document.getElementById('root');
             
+            let playerInputVal = '';
+            let shouldFocus = false;
+            if(state.view === 'SETUP') {
+                const el = document.getElementById('newPlayerInput');
+                if(el) {
+                    playerInputVal = el.value;
+                    shouldFocus = document.activeElement === el;
+                }
+            }
+
             let html = '';
             switch(state.view) {
                 case 'SETUP': html = renderSetup(); break;
@@ -528,30 +534,29 @@
                 case 'MATCH_STATS': html = renderMatchStats(); break;
             }
             
-            // Input Value Preservation für Setup
-            let playerInputVal = '';
-            if(state.view === 'SETUP') {
-                const el = document.getElementById('newPlayerInput');
-                if(el) playerInputVal = el.value;
-            }
-
             root.innerHTML = html;
 
+            // Fokus-Wiederherstellung für flüssiges Tippen
             if(state.view === 'SETUP') {
                 const el = document.getElementById('newPlayerInput');
-                if(el && playerInputVal) { el.value = playerInputVal; el.focus(); }
+                if(el) { 
+                    el.value = playerInputVal; 
+                    if(shouldFocus) el.focus(); 
+                }
             }
         }
 
         function renderSetup() {
             return `
-            <div class="${mobileContainerClasses} p-4 md:p-8">
-              <div class="max-w-md mx-auto w-full glass-panel p-6 md:p-8 rounded-3xl shadow-2xl shadow-indigo-900/10 mt-4 md:mt-10">
-                <h1 class="text-4xl font-black mb-8 neon-text tracking-tight text-center">Dart Tracker</h1>
+            <div class="${appContainerClasses} p-4 md:p-8">
+              <div class="max-w-5xl mx-auto w-full glass-panel p-6 md:p-10 rounded-3xl shadow-2xl shadow-indigo-900/10 mt-2 md:mt-10 grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16">
                 
+                <!-- Linke Spalte: Einstellungen -->
                 <div class="space-y-6">
+                  <h1 class="text-4xl md:text-5xl font-black mb-8 neon-text tracking-tight text-center lg:text-left">Dart Tracker</h1>
+                  
                   <div>
-                    <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3 ml-1 text-center">Spielmodus</h2>
+                    <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3 ml-1 text-center lg:text-left">Spielmodus</h2>
                     <div class="flex bg-slate-900/50 p-1.5 rounded-2xl border border-slate-800">
                       ${['STANDARD', 'TOURNAMENT', 'LEAGUE'].map(mode => `
                         <button onclick="setAppMode('${mode}')" class="flex-1 py-3 flex items-center justify-center rounded-xl font-bold text-xs md:text-sm transition-all active:scale-95 text-center ${state.appMode === mode ? 'bg-gradient-to-br from-indigo-500 to-blue-600 shadow-md text-white' : 'text-slate-400 hover:text-slate-200'}">
@@ -563,7 +568,7 @@
 
                   <div class="grid grid-cols-2 gap-4">
                     <div class="flex flex-col">
-                      <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3 ml-1 text-center">Punkte</h2>
+                      <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3 ml-1 text-center lg:text-left">Punkte</h2>
                       <div class="flex bg-slate-900/50 p-1.5 rounded-2xl border border-slate-800 h-full">
                         ${[301, 501].map(mode => `
                           <button onclick="setGameMode(${mode})" class="flex-1 py-3 flex items-center justify-center rounded-xl font-bold transition-all active:scale-95 text-center ${state.gameMode === mode ? 'bg-slate-700 text-white shadow' : 'text-slate-400'}">${mode}</button>
@@ -571,7 +576,7 @@
                       </div>
                     </div>
                     <div class="flex flex-col">
-                      <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3 ml-1 text-center">Checkout</h2>
+                      <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3 ml-1 text-center lg:text-left">Checkout</h2>
                       <div class="flex bg-slate-900/50 p-1.5 rounded-2xl border border-slate-800 h-full">
                         ${['Single', 'Double'].map(out => `
                           <button onclick="setOutMode('${out}')" class="flex-1 py-3 flex items-center justify-center rounded-xl font-bold text-sm transition-all active:scale-95 text-center ${state.outMode === out ? 'bg-emerald-600 text-white shadow' : 'text-slate-400'}">${out}</button>
@@ -581,14 +586,14 @@
                   </div>
 
                   <div>
-                    <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3 ml-1 text-center">Format</h2>
+                    <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3 ml-1 text-center lg:text-left">Format</h2>
                     <div class="flex gap-2 mb-4">
                       <button onclick="setMatchFormat('LEGS')" class="flex-1 py-3 flex items-center justify-center text-center rounded-2xl font-bold transition-all active:scale-95 text-sm ${state.matchFormat === 'LEGS' ? 'bg-blue-600 shadow-lg shadow-blue-900/20 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}">Nur Legs</button>
                       <button onclick="setMatchFormat('SETS')" class="flex-1 py-3 flex items-center justify-center text-center rounded-2xl font-bold transition-all active:scale-95 text-sm ${state.matchFormat === 'SETS' ? 'bg-blue-600 shadow-lg shadow-blue-900/20 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}">Sets & Legs</button>
                     </div>
                     <div class="grid grid-cols-2 gap-3">
                       <div class="flex items-center justify-between bg-slate-900/80 rounded-2xl p-2 border border-slate-800">
-                        <span class="text-xs font-bold text-slate-300 ml-3">Legs to Win</span>
+                        <span class="text-xs font-bold text-slate-300 ml-2 lg:ml-3">Legs</span>
                         <div class="flex gap-1 items-center bg-slate-800 p-1 rounded-xl">
                           <button onclick="setTargetLegs(${state.targetLegs - 1})" class="bg-slate-700 active:bg-slate-600 w-8 h-8 rounded-lg font-bold transition-transform active:scale-90 flex items-center justify-center">-</button>
                           <span class="font-black w-6 text-center">${state.targetLegs}</span>
@@ -597,7 +602,7 @@
                       </div>
                       ${state.matchFormat === 'SETS' ? `
                       <div class="flex items-center justify-between bg-slate-900/80 rounded-2xl p-2 border border-slate-800">
-                        <span class="text-xs font-bold text-slate-300 ml-3">Sets to Win</span>
+                        <span class="text-xs font-bold text-slate-300 ml-2 lg:ml-3">Sets</span>
                         <div class="flex gap-1 items-center bg-slate-800 p-1 rounded-xl">
                           <button onclick="setTargetSets(${state.targetSets - 1})" class="bg-slate-700 active:bg-slate-600 w-8 h-8 rounded-lg font-bold transition-transform active:scale-90 flex items-center justify-center">-</button>
                           <span class="font-black w-6 text-center">${state.targetSets}</span>
@@ -606,31 +611,36 @@
                       </div>` : ''}
                     </div>
                   </div>
-
-                  <div class="pt-2 border-t border-slate-800">
-                    <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3 ml-1 flex justify-between">
-                      <span>Kader</span> <span class="bg-indigo-500/20 text-indigo-300 px-2 rounded-full">${state.players.length} Spieler</span>
-                    </h2>
-                    <div class="flex gap-2 mb-4">
-                      <input id="newPlayerInput" type="text" onkeydown="handlePlayerInputKey(event)" placeholder="Neuer Spieler..." class="flex-1 bg-slate-900 border border-slate-700 rounded-2xl px-5 py-3 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 font-semibold transition-all"/>
-                      <button onclick="addPlayer()" class="bg-slate-700 text-white px-6 py-3 rounded-2xl font-black hover:bg-slate-600 active:scale-95 transition-all shadow-md flex items-center justify-center">+</button>
-                    </div>
-                    <ul class="space-y-2 max-h-40 overflow-y-auto pr-2 no-scrollbar">
-                      ${state.players.map(p => `
-                        <li class="flex justify-between items-center bg-slate-800/50 px-5 py-3.5 rounded-2xl border border-slate-700/50">
-                          <span class="font-bold text-slate-200">${p.name}</span>
-                          <button onclick="removePlayer('${p.id}')" class="text-rose-400 active:text-rose-300 font-black px-2 active:scale-90 transition-transform">✕</button>
-                        </li>
-                      `).join('')}
-                    </ul>
-                  </div>
                 </div>
 
-                ${state.errorMsg ? `<div class="mt-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 p-3 rounded-xl text-sm font-bold text-center">${state.errorMsg}</div>` : ''}
-                
-                <button onclick="startApp()" class="w-full mt-8 bg-gradient-to-r from-blue-600 to-indigo-600 py-5 rounded-2xl font-black text-xl transition-all active:scale-[0.98] shadow-xl shadow-indigo-600/20 flex items-center justify-center">
-                  ${state.appMode === 'TOURNAMENT' ? 'Turnier generieren' : state.appMode === 'LEAGUE' ? 'Liga erstellen' : 'Weiter zur Auslosung'}
-                </button>
+                <!-- Rechte Spalte: Spieler & Start -->
+                <div class="flex flex-col border-t lg:border-t-0 lg:border-l border-slate-800 pt-6 lg:pt-0 lg:pl-12">
+                  <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 ml-1 flex justify-between">
+                    <span>Kader</span> <span class="bg-indigo-500/20 text-indigo-300 px-3 py-0.5 rounded-full">${state.players.length} Spieler</span>
+                  </h2>
+                  <div class="flex gap-2 mb-4">
+                    <input id="newPlayerInput" type="text" onkeydown="handlePlayerInputKey(event)" placeholder="Neuer Spieler..." class="flex-1 bg-slate-900 border border-slate-700 rounded-2xl px-5 py-3 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 font-semibold transition-all"/>
+                    <button onclick="addPlayer()" class="bg-slate-700 text-white px-6 py-3 rounded-2xl font-black hover:bg-slate-600 active:scale-95 transition-all shadow-md flex items-center justify-center">+</button>
+                  </div>
+                  
+                  <div class="flex-1">
+                      <ul class="space-y-2 max-h-48 lg:max-h-[300px] overflow-y-auto pr-2 no-scrollbar">
+                        ${state.players.map(p => `
+                          <li class="flex justify-between items-center bg-slate-800/50 px-5 py-3.5 rounded-2xl border border-slate-700/50">
+                            <span class="font-bold text-slate-200">${p.name}</span>
+                            <button onclick="removePlayer('${p.id}')" class="text-rose-400 active:text-rose-300 font-black px-2 active:scale-90 transition-transform">✕</button>
+                          </li>
+                        `).join('')}
+                      </ul>
+                  </div>
+
+                  ${state.errorMsg ? `<div class="mt-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 p-3 rounded-xl text-sm font-bold text-center">${state.errorMsg}</div>` : ''}
+                  
+                  <button onclick="startApp()" class="w-full mt-6 bg-gradient-to-r from-blue-600 to-indigo-600 py-5 rounded-2xl font-black text-xl transition-all active:scale-[0.98] shadow-xl shadow-indigo-600/20 flex items-center justify-center">
+                    ${state.appMode === 'TOURNAMENT' ? 'Turnier generieren' : state.appMode === 'LEAGUE' ? 'Liga erstellen' : 'Weiter zur Auslosung'}
+                  </button>
+                </div>
+
               </div>
             </div>
             `;
@@ -641,7 +651,7 @@
             const tournamentWinner = isTournamentFinished ? state.rounds[state.rounds.length - 1][0].winner : null;
 
             let html = `
-            <div class="${mobileContainerClasses}">
+            <div class="${appContainerClasses}">
               <div class="p-4 md:p-6 border-b border-slate-800/80 flex justify-between items-center glass-panel z-20">
                  <h1 class="text-xl md:text-2xl font-black neon-text tracking-tight">Turnierbaum</h1>
                  <button onclick="resetApp()" class="text-xs bg-slate-800 text-slate-300 px-4 py-2.5 rounded-xl active:scale-95 transition-transform font-bold border border-slate-700">Beenden</button>
@@ -713,7 +723,7 @@
             const isLeagueFinished = state.leagueMatches.every(m => m.winner !== null);
 
             let html = `
-            <div class="${mobileContainerClasses}">
+            <div class="${appContainerClasses}">
               <div class="p-4 md:p-6 border-b border-slate-800/80 flex justify-between items-center glass-panel sticky top-0 z-20">
                  <h1 class="text-xl md:text-2xl font-black neon-text tracking-tight">Liga Zentrale</h1>
                  <button onclick="resetApp()" class="text-xs bg-slate-800 text-slate-300 px-4 py-2.5 rounded-xl active:scale-95 transition-transform font-bold border border-slate-700">Beenden</button>
@@ -791,7 +801,7 @@
         }
 
         function renderDecideStarter() {
-            let html = `<div class="${mobileContainerClasses} justify-center p-4 relative">`;
+            let html = `<div class="${appContainerClasses} justify-center p-4 relative">`;
 
             if (state.bullOff.winner !== null) {
                 html += `
@@ -918,7 +928,7 @@
             const winner = state.activeGame.players.find(p => state.activeGame.matchFormat === 'SETS' ? p.setsWon >= state.activeGame.targetSets : p.legsWon >= state.activeGame.targetLegs);
 
             return `
-            <div class="${mobileContainerClasses} p-4 md:p-8">
+            <div class="${appContainerClasses} p-4 md:p-8">
               <div class="max-w-4xl mx-auto w-full flex-1 flex flex-col justify-center">
                 <div class="glass-panel p-6 md:p-10 rounded-3xl shadow-2xl relative overflow-hidden">
                   <div class="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-emerald-400 to-teal-500"></div>
@@ -946,7 +956,7 @@
                           const pScore = state.activeGame.matchFormat === 'SETS' ? p.setsWon : p.legsWon;
                           return `
                             <tr class="border-t border-slate-800/50 ${idx % 2 !== 0 ? 'bg-slate-800/20' : ''}">
-                              <td class="p-4 font-bold text-sm md:text-base text-slate-200 truncate max-w-[100px]">${p.name}</td>
+                              <td class="p-4 font-bold text-sm md:text-base text-slate-200 truncate max-w-[100px] lg:max-w-none">${p.name}</td>
                               <td class="p-4 text-center font-black text-xl md:text-2xl text-white">${pScore}</td>
                               <td class="p-4 text-center font-bold text-indigo-300 text-sm md:text-base">${avg}</td>
                               <td class="p-4 text-center font-bold text-slate-300 text-sm md:text-base">${first9}</td>
@@ -973,7 +983,7 @@
             const projectedScore = activePlayer.score - roundTotal;
             const checkoutRoute = getCheckoutSuggestion(projectedScore, state.outMode);
 
-            let html = `<div class="${mobileContainerClasses} flex flex-col p-2 md:p-4">`;
+            let html = `<div class="${appContainerClasses} flex flex-col p-2 md:p-4 lg:p-8">`;
 
             if (state.turnNotification) {
                 html += `
@@ -989,16 +999,18 @@
             }
 
             html += `
-              <div class="max-w-2xl mx-auto w-full flex-1 flex flex-col justify-between h-full">
-                <div>
+              <div class="max-w-6xl mx-auto w-full flex-1 flex flex-col lg:flex-row gap-4 lg:gap-12 justify-between h-full">
+                
+                <!-- Linke Spalte (PC) / Oben (Mobile): Header & Scores -->
+                <div class="flex-1 flex flex-col justify-start lg:justify-center w-full lg:max-w-2xl">
                   <div class="flex justify-between items-center mb-3 px-2">
                      <div class="flex flex-col">
-                       <span class="text-sm font-black text-slate-300 tracking-tight">${state.gameMode} • ${state.outMode}</span>
-                       <span class="text-[10px] text-indigo-400 font-bold uppercase tracking-widest">
+                       <span class="text-sm md:text-base font-black text-slate-300 tracking-tight">${state.gameMode} • ${state.outMode}</span>
+                       <span class="text-[10px] md:text-xs text-indigo-400 font-bold uppercase tracking-widest">
                          ${state.activeGame.matchFormat === 'SETS' ? `Best of ${state.activeGame.targetSets} Sets` : `First to ${state.activeGame.targetLegs} Legs`}
                        </span>
                      </div>
-                     <button onclick="setView('MATCH_STATS')" class="text-xs bg-slate-800/80 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg active:scale-95 transition-all font-bold flex items-center justify-center">Abbrechen</button>
+                     <button onclick="setView('MATCH_STATS')" class="text-xs md:text-sm bg-slate-800/80 text-slate-300 border border-slate-700 px-3 md:px-4 py-1.5 md:py-2 rounded-lg active:scale-95 transition-all font-bold flex items-center justify-center">Abbrechen</button>
                   </div>
 
                   <div class="flex gap-3 mb-4 overflow-x-auto pb-2 no-scrollbar snap-x">
@@ -1006,46 +1018,46 @@
                       const isActive = idx === state.activeGame.currentPlayerIndex;
                       const isStarter = idx === state.activeGame.startingPlayerIndex;
                       return `
-                        <div class="snap-center flex-1 min-w-[130px] p-4 rounded-3xl border-2 transition-all relative ${isActive ? 'bg-indigo-600/10 border-indigo-500 shadow-[0_0_25px_rgba(99,102,241,0.15)] scale-100' : 'bg-slate-900/50 border-slate-800 scale-95 opacity-80'}">
-                          ${isStarter ? `<div class="absolute top-3 right-3 w-2 h-2 bg-yellow-400 rounded-full shadow-[0_0_8px_rgba(250,204,21,0.8)]"></div>` : ''}
-                          <h3 class="text-xs md:text-sm mb-2 truncate font-bold uppercase tracking-wide ${isActive ? 'text-indigo-300' : 'text-slate-400'}">${p.name}</h3>
-                          <div class="flex gap-3 text-[10px] font-black text-slate-500 mb-1 tracking-widest">
+                        <div class="snap-center flex-1 min-w-[130px] p-4 lg:p-6 rounded-3xl border-2 transition-all relative ${isActive ? 'bg-indigo-600/10 border-indigo-500 shadow-[0_0_25px_rgba(99,102,241,0.15)] scale-100' : 'bg-slate-900/50 border-slate-800 scale-95 opacity-80'}">
+                          ${isStarter ? `<div class="absolute top-3 md:top-4 right-3 md:right-4 w-2 h-2 md:w-3 md:h-3 bg-yellow-400 rounded-full shadow-[0_0_8px_rgba(250,204,21,0.8)]" title="Begonnenes Leg"></div>` : ''}
+                          <h3 class="text-xs md:text-base mb-2 lg:mb-4 truncate font-bold uppercase tracking-wide ${isActive ? 'text-indigo-300' : 'text-slate-400'}">${p.name}</h3>
+                          <div class="flex gap-3 text-[10px] md:text-xs font-black text-slate-500 mb-1 lg:mb-2 tracking-widest">
                             ${state.activeGame.matchFormat === 'SETS' ? `<span>S: <span class="text-slate-200">${p.setsWon}</span></span>` : ''}
                             <span>L: <span class="text-slate-200">${p.legsWon}</span></span>
                           </div>
-                          <p class="text-6xl md:text-7xl font-black leading-none tracking-tighter ${isActive ? 'text-white' : 'text-slate-300'}">${p.score}</p>
+                          <p class="text-6xl md:text-8xl lg:text-9xl font-black leading-none tracking-tighter ${isActive ? 'text-white' : 'text-slate-300'}">${p.score}</p>
                         </div>`;
                     }).join('')}
                   </div>
 
-                  <div class="glass-panel p-3 rounded-2xl mb-2">
+                  <div class="glass-panel p-3 lg:p-5 rounded-2xl mb-2">
                     <div class="grid gap-y-2 items-center" style="grid-template-columns: auto repeat(${state.activeGame.players.length}, 1fr)">
-                      <div class="text-slate-500 text-[9px] font-bold uppercase tracking-widest pl-1">3-Dart Avg</div>
+                      <div class="text-slate-500 text-[9px] md:text-xs font-bold uppercase tracking-widest pl-1 lg:py-1">3-Dart Avg</div>
                       ${state.activeGame.players.map(p => `
-                        <div class="text-center font-black text-[11px] md:text-xs text-slate-200">
+                        <div class="text-center font-black text-[11px] md:text-sm lg:text-base text-slate-200">
                           ${p.stats.totalDarts > 0 ? ((p.stats.totalScore / p.stats.totalDarts) * 3).toFixed(1) : '0.0'}
                         </div>
                       `).join('')}
                       
-                      <div class="text-slate-500 text-[9px] font-bold uppercase tracking-widest pl-1">First 9 Avg</div>
+                      <div class="text-slate-500 text-[9px] md:text-xs font-bold uppercase tracking-widest pl-1 lg:py-1">First 9 Avg</div>
                       ${state.activeGame.players.map(p => `
-                        <div class="text-center font-black text-[11px] md:text-xs text-slate-200">
+                        <div class="text-center font-black text-[11px] md:text-sm lg:text-base text-slate-200">
                           ${p.stats.first9Darts > 0 ? ((p.stats.first9Score / p.stats.first9Darts) * 3).toFixed(1) : '0.0'}
                         </div>
                       `).join('')}
 
-                      <div class="text-slate-500 text-[9px] font-bold uppercase tracking-widest pl-1">Checkout</div>
+                      <div class="text-slate-500 text-[9px] md:text-xs font-bold uppercase tracking-widest pl-1 lg:py-1">Checkout</div>
                       ${state.activeGame.players.map(p => `
-                        <div class="text-center font-black text-[11px] md:text-xs text-emerald-400">
+                        <div class="text-center font-black text-[11px] md:text-sm lg:text-base text-emerald-400">
                           ${p.stats.checkouts}/${p.stats.checkoutAttempts}
                         </div>
                       `).join('')}
 
-                      <div class="text-slate-500 text-[9px] font-bold uppercase tracking-widest pl-1">Darts (Leg)</div>
+                      <div class="text-slate-500 text-[9px] md:text-xs font-bold uppercase tracking-widest pl-1 lg:py-1">Darts (Leg)</div>
                       ${state.activeGame.players.map(p => {
                         const legDarts = p.history.reduce((sum, turn) => sum + turn.length, 0);
                         return `
-                          <div class="text-center font-black text-[11px] md:text-xs text-slate-400">
+                          <div class="text-center font-black text-[11px] md:text-sm lg:text-base text-slate-400">
                             ${legDarts}
                           </div>
                         `;
@@ -1054,52 +1066,53 @@
                   </div>
                 </div>
 
-                <div class="flex flex-col mt-auto">
-                  <div class="bg-slate-800 p-3 rounded-t-3xl border-t border-x border-slate-700 flex justify-between items-center min-h-[70px]">
+                <!-- Rechte Spalte (PC) / Unten (Mobile): Input -->
+                <div class="w-full lg:w-[450px] flex flex-col justify-end lg:justify-center mt-auto lg:mt-0 shrink-0">
+                  <div class="bg-slate-800 p-3 lg:p-4 rounded-t-3xl border-t border-x border-slate-700 flex justify-between items-center min-h-[70px] lg:min-h-[85px]">
                      <div class="flex items-center gap-2">
                         ${[0, 1, 2].map(idx => {
                           const dart = state.currentDarts[idx];
                           return `
-                            <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-sm md:text-base font-black transition-all ${dart ? 'bg-indigo-600 border-none text-white shadow-lg shadow-indigo-600/30' : 'bg-slate-900 border border-slate-700 text-slate-600'}">
+                            <div class="w-12 h-12 lg:w-14 lg:h-14 rounded-2xl flex items-center justify-center text-sm md:text-base lg:text-lg font-black transition-all ${dart ? 'bg-indigo-600 border-none text-white shadow-lg shadow-indigo-600/30' : 'bg-slate-900 border border-slate-700 text-slate-600'}">
                               ${dart ? formatDart(dart) : '-'}
                             </div>
                           `;
                         }).join('')}
                         <div class="ml-3 text-center">
-                          <span class="block text-[9px] text-slate-400 uppercase font-black tracking-widest">Sum</span>
-                          <span class="font-black text-2xl text-white leading-none tracking-tighter">${roundTotal}</span>
+                          <span class="block text-[9px] lg:text-[10px] text-slate-400 uppercase font-black tracking-widest">Sum</span>
+                          <span class="font-black text-2xl lg:text-3xl text-white leading-none tracking-tighter">${roundTotal}</span>
                         </div>
                      </div>
 
                      ${checkoutRoute ? `
                        <div class="text-right bg-emerald-500/10 px-4 py-2 rounded-2xl border border-emerald-500/20">
                          <span class="block text-emerald-400 text-[9px] font-black uppercase tracking-widest mb-0.5">Weg</span>
-                         <span class="text-white font-black text-sm md:text-base tracking-tight">${checkoutRoute}</span>
+                         <span class="text-white font-black text-sm md:text-base lg:text-lg tracking-tight">${checkoutRoute}</span>
                        </div>
                      ` : ''}
                   </div>
 
-                  <div class="bg-slate-800 p-3 rounded-b-3xl border border-slate-700 shadow-2xl mt-[1px]">
-                    <div class="flex gap-2 mb-3">
-                      <button onclick="setInputMultiplier(1)" class="flex-1 py-3.5 flex items-center justify-center rounded-2xl font-black text-sm transition-all active:scale-95 ${state.inputMultiplier === 1 ? 'bg-slate-200 text-slate-900 shadow-lg' : 'bg-slate-900 text-slate-400 hover:bg-slate-700'}">Single</button>
-                      <button onclick="setInputMultiplier(2)" class="flex-1 py-3.5 flex items-center justify-center rounded-2xl font-black text-sm transition-all active:scale-95 ${state.inputMultiplier === 2 ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' : 'bg-slate-900 text-slate-400 hover:bg-slate-700'}">Double</button>
-                      <button onclick="setInputMultiplier(3)" class="flex-1 py-3.5 flex items-center justify-center rounded-2xl font-black text-sm transition-all active:scale-95 ${state.inputMultiplier === 3 ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30' : 'bg-slate-900 text-slate-400 hover:bg-slate-700'}">Treble</button>
+                  <div class="bg-slate-800 p-3 lg:p-5 rounded-b-3xl border border-slate-700 shadow-2xl mt-[1px]">
+                    <div class="flex gap-2 lg:gap-3 mb-3 lg:mb-4">
+                      <button onclick="setInputMultiplier(1)" class="flex-1 py-3.5 lg:py-5 flex items-center justify-center rounded-2xl font-black text-sm lg:text-base transition-all active:scale-95 ${state.inputMultiplier === 1 ? 'bg-slate-200 text-slate-900 shadow-lg' : 'bg-slate-900 text-slate-400 hover:bg-slate-700'}">Single</button>
+                      <button onclick="setInputMultiplier(2)" class="flex-1 py-3.5 lg:py-5 flex items-center justify-center rounded-2xl font-black text-sm lg:text-base transition-all active:scale-95 ${state.inputMultiplier === 2 ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' : 'bg-slate-900 text-slate-400 hover:bg-slate-700'}">Double</button>
+                      <button onclick="setInputMultiplier(3)" class="flex-1 py-3.5 lg:py-5 flex items-center justify-center rounded-2xl font-black text-sm lg:text-base transition-all active:scale-95 ${state.inputMultiplier === 3 ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30' : 'bg-slate-900 text-slate-400 hover:bg-slate-700'}">Treble</button>
                     </div>
 
-                    <div class="grid grid-cols-5 gap-2 mb-3">
+                    <div class="grid grid-cols-5 gap-2 lg:gap-3 mb-3 lg:mb-4">
                       ${Array.from({length: 20}, (_, i) => i + 1).map(num => `
-                        <button onclick="handleAddDart(${num})" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-slate-700 flex items-center justify-center active:bg-indigo-500 disabled:opacity-50 py-3 md:py-4 rounded-2xl font-black text-xl transition-all active:scale-90 shadow-sm border-b-2 border-slate-900 text-slate-100">${num}</button>
+                        <button onclick="handleAddDart(${num})" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-slate-700 flex items-center justify-center active:bg-indigo-500 disabled:opacity-50 py-3 md:py-4 lg:py-5 rounded-2xl font-black text-xl lg:text-2xl transition-all active:scale-90 shadow-sm border-b-2 border-slate-900 text-slate-100">${num}</button>
                       `).join('')}
                     </div>
 
-                    <div class="grid grid-cols-4 gap-2 mb-4">
-                      <button onclick="handleAddDart(0, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-slate-900 flex items-center justify-center active:bg-slate-700 py-3.5 rounded-2xl font-black text-xs md:text-sm disabled:opacity-50 transition-transform active:scale-95 text-slate-400 border border-slate-700">Miss</button>
-                      <button onclick="handleAddDart(25, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-emerald-900/40 flex items-center justify-center border border-emerald-700/50 active:bg-emerald-800 text-emerald-300 py-3.5 rounded-2xl font-black text-xs md:text-sm disabled:opacity-50 transition-transform active:scale-95">25</button>
-                      <button onclick="handleAddDart(25, 2)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-rose-900/40 flex items-center justify-center border border-rose-700/50 active:bg-rose-800 text-rose-300 py-3.5 rounded-2xl font-black text-xs md:text-sm disabled:opacity-50 transition-transform active:scale-95">50</button>
-                      <button onclick="handleUndoDart()" ${state.currentDarts.length === 0 ? 'disabled' : ''} class="bg-slate-700 flex items-center justify-center active:bg-slate-600 text-slate-300 py-3.5 rounded-2xl font-black text-xs md:text-sm disabled:opacity-50 transition-transform active:scale-95">⌫ Undo</button>
+                    <div class="grid grid-cols-4 gap-2 lg:gap-3 mb-4 lg:mb-6">
+                      <button onclick="handleAddDart(0, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-slate-900 flex items-center justify-center active:bg-slate-700 py-3.5 lg:py-5 rounded-2xl font-black text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95 text-slate-400 border border-slate-700">Miss</button>
+                      <button onclick="handleAddDart(25, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-emerald-900/40 flex items-center justify-center border border-emerald-700/50 active:bg-emerald-800 text-emerald-300 py-3.5 lg:py-5 rounded-2xl font-black text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95">25</button>
+                      <button onclick="handleAddDart(25, 2)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-rose-900/40 flex items-center justify-center border border-rose-700/50 active:bg-rose-800 text-rose-300 py-3.5 lg:py-5 rounded-2xl font-black text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95">50</button>
+                      <button onclick="handleUndoDart()" ${state.currentDarts.length === 0 ? 'disabled' : ''} class="bg-slate-700 flex items-center justify-center active:bg-slate-600 text-slate-300 py-3.5 lg:py-5 rounded-2xl font-black text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95">⌫ Undo</button>
                     </div>
 
-                    <button onclick="submitTurn()" ${state.currentDarts.length === 0 ? 'disabled' : ''} class="w-full flex items-center justify-center bg-indigo-600 disabled:bg-slate-800 disabled:text-slate-600 py-5 rounded-2xl font-black text-xl transition-all active:scale-[0.98] shadow-xl shadow-indigo-600/20 text-white tracking-wide border-b-4 border-indigo-800 disabled:border-none">
+                    <button onclick="submitTurn()" ${state.currentDarts.length === 0 ? 'disabled' : ''} class="w-full flex items-center justify-center bg-indigo-600 disabled:bg-slate-800 disabled:text-slate-600 py-5 lg:py-6 rounded-2xl font-black text-xl lg:text-2xl transition-all active:scale-[0.98] shadow-xl shadow-indigo-600/20 text-white tracking-wide border-b-4 border-indigo-800 disabled:border-none">
                       Bestätigen
                     </button>
                   </div>
