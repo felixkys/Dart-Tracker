@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Dart Tracker</title>
+    
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800;900&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind Config & Custom CSS -->
+    <script>
+        tailwind.config = {
+            theme: { extend: { fontFamily: { sans: ['Outfit', 'sans-serif'] } } }
+        }
+    </script>
+    <style>
+        :root { --font-sans: 'Outfit', ui-sans-serif, system-ui, sans-serif; }
+        body { background-color: #0f172a; font-family: var(--font-sans); margin: 0; }
+        .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.05); }
+        .neon-text { background: linear-gradient(to right, #60a5fa, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        @keyframes coinFlip { 0% { transform: rotateY(0deg) scale(1); } 50% { transform: rotateY(900deg) scale(1.5); } 100% { transform: rotateY(1800deg) scale(1); } }
+        .coin-flip-anim { animation: coinFlip 1.5s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        .mobile-container { min-height: 100dvh; background-color: #020617; color: #f1f5f9; user-select: none; touch-action: manipulation; overscroll-behavior: none; padding-bottom: env(safe-area-inset-bottom); overflow-x: hidden; display: flex; flex-direction: column; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script>
+        // ==========================================
+        // 1. STATE MANAGEMENT & DATENBANK
+        // ==========================================
+        const DB_NAME = 'DartTrackerDB_HTML';
+        const STORE_NAME = 'appState';
+
+        const getDefaultStats = () => ({
+            totalDarts: 0, totalScore: 0, first9Score: 0, first9Darts: 0, checkoutAttempts: 0, checkouts: 0
+        });
+
+        // Zentraler App-State
+        let state = {
+            isDbLoaded: false,
+            view: 'SETUP',
+            appMode: 'STANDARD',
+            gameMode: 501,
+            outMode: 'Double',
+            matchFormat: 'LEGS',
+            targetLegs: 3,
+            targetSets: 2,
+            players: [],
+            rounds: [],
+            leagueMatches: [],
+            currentRoundIndex: 0,
+            activeGame: null,
+            currentDarts: [],
+            inputMultiplier: 1,
+            errorMsg: '',
+            starterMode: 'SELECT',
+            isCoinFlipping: false,
+            coinWinner: null,
+            bullOff: { order: [], currentTurn: 0, hits: {}, winner: null, isTie: false },
+            turnNotification: null
+        };
+
+        const dbHelper = {
+            init: () => new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, 1);
+                request.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
+                };
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            }),
+            save: async (data) => {
+                try {
+                    const db = await dbHelper.init();
+                    const tx = db.transaction(STORE_NAME, 'readwrite');
+                    tx.objectStore(STORE_NAME).put(data, 'mainState');
+                } catch (err) {}
+            },
+            load: async () => {
+                try {
+                    const db = await dbHelper.init();
+                    return new Promise((resolve) => {
+                        const tx = db.transaction(STORE_NAME, 'readonly');
+                        const req = tx.objectStore(STORE_NAME).get('mainState');
+                        req.onsuccess = () => resolve(req.result);
+                        req.onerror = () => resolve(null);
+                    });
+                } catch (err) { return null; }
+            }
+        };
+
+        // State Updater Funktion (löst Rerender aus)
+        function setState(updates) {
+            state = { ...state, ...updates };
+            
+            // Speichere persistente Daten
+            const { isDbLoaded, errorMsg, currentDarts, inputMultiplier, isCoinFlipping, turnNotification, ...persistentState } = state;
+            if (state.isDbLoaded) dbHelper.save(persistentState);
+            
+            render();
+        }
+
+        // ==========================================
+        // 2. INITIALISIERUNG
+        // ==========================================
+        async function initApp() {
+            const savedState = await dbHelper.load();
+            if (savedState) {
+                state = { ...state, ...savedState, isDbLoaded: true, currentDarts: [], inputMultiplier: 1, turnNotification: null };
+            } else {
+                state.isDbLoaded = true;
+            }
+            render();
+        }
+
+        // ==========================================
+        // 3. LOGIK & HILFSFUNKTIONEN
+        // ==========================================
+        const playSound = (type) => {
+            try { new Audio(type === '180' ? '/180.mp3' : '/bust.mp3').play().catch(()=>{}); } catch (e) {}
+        };
+
+        const formatDart = (d) => {
+            if (d.base === 0) return 'Miss';
+            if (d.base === 25 && d.multiplier === 1) return '25';
+            if (d.base === 25 && d.multiplier === 2) return '50';
+            if (d.multiplier === 1) return `${d.base}`;
+            if (d.multiplier === 2) return `D${d.base}`;
+            if (d.multiplier === 3) return `T${d.base}`;
+            return `${d.base}`;
+        };
+
+        const getWedgePath = (r) => {
+            const x = 50 + r * Math.sin(18 * Math.PI / 180);
+            const y = 50 - r * Math.cos(18 * Math.PI / 180);
+            return `M 50 50 L 50 ${50-r} A ${r} ${r} 0 0 1 ${x} ${y} Z`;
+        };
+
+        const getCheckoutSuggestion = (score, mode) => {
+            if (score > 170 || score < 2) return null;
+            if (mode === 'Double' && [169, 168, 166, 165, 163, 162, 159].includes(score)) return null;
+            if (mode === 'Single') {
+                if (score <= 60 && (score <= 20 || score === 25 || score === 50 || score % 2 === 0 || score % 3 === 0)) return 'Finish';
+                return null; 
+            }
+            if (score <= 40) {
+                if (score % 2 === 0) return `D${score / 2}`;
+                const toLeave16 = score - 32;
+                if (toLeave16 > 0 && toLeave16 <= 20) return `${toLeave16} ➔ D16`;
+                const toLeave8 = score - 16;
+                if (toLeave8 > 0 && toLeave8 <= 20) return `${toLeave8} ➔ D8`;
+                return `1 ➔ D${(score - 1) / 2}`;
+            }
+
+            const standardCheckouts = {
+                170: 'T20 ➔ T20 ➔ Bull', 167: 'T20 ➔ T19 ➔ Bull', 164: 'T20 ➔ T18 ➔ Bull', 161: 'T20 ➔ T17 ➔ Bull',
+                160: 'T20 ➔ T20 ➔ D20', 158: 'T20 ➔ T20 ➔ D19', 157: 'T20 ➔ T19 ➔ D20', 156: 'T20 ➔ T20 ➔ D18',
+                155: 'T20 ➔ T19 ➔ D19', 154: 'T20 ➔ T18 ➔ D20', 153: 'T20 ➔ T19 ➔ D18', 152: 'T20 ➔ T20 ➔ D16',
+                151: 'T20 ➔ T17 ➔ D20', 150: 'T20 ➔ T18 ➔ D18', 149: 'T20 ➔ T19 ➔ D16', 148: 'T20 ➔ T16 ➔ D20',
+                147: 'T20 ➔ T17 ➔ D18', 146: 'T20 ➔ T18 ➔ D16', 145: 'T20 ➔ T15 ➔ D20', 144: 'T20 ➔ T20 ➔ D12',
+                143: 'T20 ➔ T17 ➔ D16', 142: 'T20 ➔ T14 ➔ D20', 141: 'T20 ➔ T15 ➔ D18', 140: 'T20 ➔ T20 ➔ D10',
+                139: 'T19 ➔ T14 ➔ D20', 138: 'T20 ➔ T18 ➔ D12', 137: 'T19 ➔ T16 ➔ D16', 136: 'T20 ➔ T20 ➔ D8',
+                135: 'T20 ➔ T17 ➔ D12', 134: 'T20 ➔ T14 ➔ D16', 133: 'T20 ➔ T19 ➔ D8', 132: 'T20 ➔ T16 ➔ D12',
+                131: 'T20 ➔ T13 ➔ D16', 130: 'T20 ➔ 20 ➔ Bull', 129: 'T19 ➔ T16 ➔ D12', 128: 'T18 ➔ T14 ➔ D16',
+                127: 'T20 ➔ T17 ➔ D8', 126: 'T19 ➔ 19 ➔ Bull', 125: 'Bull ➔ T20 ➔ D7', 124: 'T20 ➔ T16 ➔ D8', 
+                123: 'T19 ➔ T16 ➔ D9', 122: 'T18 ➔ 18 ➔ Bull', 121: 'T20 ➔ T11 ➔ D14', 120: 'T20 ➔ 20 ➔ D20',
+                119: 'T19 ➔ T10 ➔ D16', 118: 'T20 ➔ 18 ➔ D20', 117: 'T20 ➔ 17 ➔ D20', 116: 'T20 ➔ 16 ➔ D20',
+                115: 'T20 ➔ 15 ➔ D20', 114: 'T20 ➔ 14 ➔ D20', 113: 'T20 ➔ 13 ➔ D20', 112: 'T20 ➔ 12 ➔ D20',
+                111: 'T20 ➔ 11 ➔ D20', 110: 'T20 ➔ 10 ➔ D20', 109: 'T19 ➔ 12 ➔ D20', 108: 'T20 ➔ 16 ➔ D16',
+                107: 'T19 ➔ 10 ➔ D20', 106: 'T20 ➔ 10 ➔ D18', 105: 'T19 ➔ 16 ➔ D16', 104: 'T18 ➔ 10 ➔ D20',
+                103: 'T19 ➔ 10 ➔ D18', 102: 'T20 ➔ 10 ➔ D16', 101: 'T17 ➔ 10 ➔ D20', 100: 'T20 ➔ D20',
+                99: 'T19 ➔ 10 ➔ D16', 98: 'T20 ➔ D19', 97: 'T19 ➔ D20', 96: 'T20 ➔ D18',
+                95: 'T19 ➔ D19', 94: 'T18 ➔ D20', 93: 'T19 ➔ D18', 92: 'T20 ➔ D16',
+                91: 'T17 ➔ D20', 90: 'T18 ➔ D18', 89: 'T19 ➔ D16', 88: 'T16 ➔ D20',
+                87: 'T17 ➔ D18', 86: 'T18 ➔ D16', 85: 'T15 ➔ D20', 84: 'T20 ➔ D12',
+                83: 'T17 ➔ D16', 82: 'T14 ➔ D20', 81: 'T15 ➔ D18', 80: 'T20 ➔ D10',
+                79: 'T13 ➔ D20', 78: 'T18 ➔ D12', 77: 'T15 ➔ D16', 76: 'T20 ➔ D8',
+                75: 'T17 ➔ D12', 74: 'T14 ➔ D16', 73: 'T19 ➔ D8', 72: 'T16 ➔ D12',
+                71: 'T13 ➔ D16', 70: 'T18 ➔ D8', 69: 'T15 ➔ D12', 68: 'T20 ➔ D4',
+                67: 'T17 ➔ D8', 66: 'T10 ➔ D18', 65: 'T11 ➔ D16', 64: 'T16 ➔ D8',
+                63: 'T13 ➔ D12', 62: 'T10 ➔ D16', 61: 'T15 ➔ D8', 60: '20 ➔ D20',
+                59: '19 ➔ D20', 58: '18 ➔ D20', 57: '17 ➔ D20', 56: '16 ➔ D20',
+                55: '15 ➔ D20', 54: '14 ➔ D20', 53: '13 ➔ D20', 52: '12 ➔ D20',
+                51: '11 ➔ D20', 50: '10 ➔ D20', 49: '9 ➔ D20', 48: '16 ➔ D16',
+                47: '15 ➔ D16', 46: '14 ➔ D16', 45: '13 ➔ D16', 44: '12 ➔ D16',
+                43: '11 ➔ D16', 42: '10 ➔ D16', 41: '9 ➔ D16'
+            };
+            return standardCheckouts[score] || null;
+        };
+
+        const getLeagueStandings = () => {
+            const standings = {};
+            state.players.forEach(p => standings[p.id] = { player: p, played: 0, wins: 0, points: 0 });
+            state.leagueMatches.forEach(m => {
+                if (m.winner) {
+                    standings[m.player1.id].played++;
+                    if (m.player2) standings[m.player2.id].played++;
+                    standings[m.winner.id].wins++;
+                    standings[m.winner.id].points += 2; 
+                }
+            });
+            return Object.values(standings).sort((a, b) => b.points !== a.points ? b.points - a.points : b.wins - a.wins);
+        };
+
+        // ==========================================
+        // 4. EVENTS & ACTIONS (Global gebunden für onclick)
+        // ==========================================
+        window.setAppMode = (m) => setState({appMode: m});
+        window.setGameMode = (m) => setState({gameMode: m});
+        window.setOutMode = (m) => setState({outMode: m});
+        window.setMatchFormat = (m) => setState({matchFormat: m});
+        window.setTargetLegs = (v) => setState({targetLegs: Math.max(1, v)});
+        window.setTargetSets = (v) => setState({targetSets: Math.max(1, v)});
+        window.setInputMultiplier = (m) => setState({inputMultiplier: m});
+        window.setView = (v) => setState({view: v});
+        window.setTurnNotification = (n) => setState({turnNotification: n});
+
+        window.addPlayer = () => {
+            const input = document.getElementById('newPlayerInput');
+            if (input && input.value.trim() !== '') {
+                const newPlayers = [...state.players, { id: crypto.randomUUID(), name: input.value.trim() }];
+                setState({ players: newPlayers, errorMsg: '' });
+                // Fokus wiederherstellen nach Render
+                setTimeout(() => document.getElementById('newPlayerInput')?.focus(), 10);
+            }
+        };
+
+        window.removePlayer = (id) => {
+            setState({ players: state.players.filter(p => p.id !== id) });
+        };
+
+        window.handlePlayerInputKey = (e) => {
+            if (e.key === 'Enter') window.addPlayer();
+        };
+
+        const resetWizardStates = () => ({
+            starterMode: 'SELECT', isCoinFlipping: false, coinWinner: null,
+            bullOff: { order: [], currentTurn: 0, hits: {}, winner: null, isTie: false }
+        });
+
+        window.resetApp = () => {
+            setState({ view: 'SETUP', rounds: [], leagueMatches: [], activeGame: null, currentDarts: [], inputMultiplier: 1, turnNotification: null, ...resetWizardStates() });
+        };
+
+        const generateBracketRound = (participants) => {
+            const newMatches = [];
+            for (let i = 0; i < participants.length; i += 2) {
+                if (participants[i + 1]) {
+                    newMatches.push({ id: crypto.randomUUID(), player1: participants[i], player2: participants[i + 1], winner: null, score1: 0, score2: 0 });
+                } else {
+                    newMatches.push({ id: crypto.randomUUID(), player1: participants[i], player2: null, winner: participants[i], score1: state.matchFormat === 'SETS' ? state.targetSets : state.targetLegs, score2: 0 });
+                }
+            }
+            return newMatches;
+        };
+
+        window.startApp = () => {
+            if (state.players.length < 1 && state.appMode === 'STANDARD') { setState({errorMsg: 'Mindestens ein Spieler wird benötigt.'}); return; }
+            if (state.players.length < 2 && (state.appMode === 'TOURNAMENT' || state.appMode === 'LEAGUE')) { setState({errorMsg: `Mindestens zwei Spieler für ${state.appMode === 'LEAGUE' ? 'Liga' : 'Turnier'} benötigt.`}); return; }
+            
+            let updates = { errorMsg: '', turnNotification: null, ...resetWizardStates() };
+
+            if (state.appMode === 'TOURNAMENT') {
+                const shuffled = [...state.players].sort(() => Math.random() - 0.5);
+                updates.rounds = [generateBracketRound(shuffled)];
+                updates.currentRoundIndex = 0;
+                updates.view = 'BRACKET';
+            } else if (state.appMode === 'LEAGUE') {
+                const matches = [];
+                for (let i = 0; i < state.players.length; i++) {
+                    for (let j = i + 1; j < state.players.length; j++) {
+                        matches.push({ id: crypto.randomUUID(), player1: state.players[i], player2: state.players[j], winner: null, score1: 0, score2: 0 });
+                    }
+                }
+                updates.leagueMatches = matches.sort(() => Math.random() - 0.5);
+                updates.view = 'LEAGUE_HUB';
+            } else {
+                const matchPlayers = state.players.map(p => ({ ...p, score: state.gameMode, history: [], legsWon: 0, setsWon: 0, stats: getDefaultStats() }));
+                updates.activeGame = { mode: 'STANDARD', matchId: 'standard', matchFormat: state.matchFormat, targetLegs: state.targetLegs, targetSets: state.targetSets, players: matchPlayers, currentPlayerIndex: 0, startingPlayerIndex: 0 };
+                updates.view = 'DECIDE_STARTER';
+            }
+            setState(updates);
+        };
+
+        window.startMatchById = (matchId, mode) => {
+            let match;
+            if (mode === 'TOURNAMENT') match = state.rounds[state.currentRoundIndex].find(m => m.id === matchId);
+            else match = state.leagueMatches.find(m => m.id === matchId);
+            
+            if (!match || match.winner) return;
+
+            setState({
+                activeGame: {
+                    mode: mode, matchId: match.id, matchFormat: state.matchFormat, targetLegs: state.targetLegs, targetSets: state.targetSets,
+                    players: [
+                        { ...match.player1, score: state.gameMode, history: [], legsWon: 0, setsWon: 0, stats: getDefaultStats() },
+                        { ...match.player2, score: state.gameMode, history: [], legsWon: 0, setsWon: 0, stats: getDefaultStats() }
+                    ],
+                    currentPlayerIndex: 0, startingPlayerIndex: 0
+                },
+                currentDarts: [], inputMultiplier: 1, turnNotification: null, view: 'DECIDE_STARTER', ...resetWizardStates()
+            });
+        };
+
+        window.advanceTournamentRound = () => {
+            const currentRound = state.rounds[state.currentRoundIndex];
+            const winners = currentRound.map(m => m.winner).filter(Boolean);
+            if (winners.length === 1) return;
+            const newRounds = [...state.rounds, generateBracketRound(winners)];
+            setState({ rounds: newRounds, currentRoundIndex: state.currentRoundIndex + 1 });
+        };
+
+        // --- Starter Wizard ---
+        window.startWithPlayer = (index) => {
+            setState({
+                activeGame: { ...state.activeGame, startingPlayerIndex: index, currentPlayerIndex: index },
+                view: 'MATCH'
+            });
+        };
+
+        window.handleCoinTossInit = () => {
+            setState({ starterMode: 'COIN_TOSS', isCoinFlipping: true, coinWinner: null });
+            setTimeout(() => {
+                const randomIndex = Math.floor(Math.random() * state.activeGame.players.length);
+                setState({ coinWinner: randomIndex, isCoinFlipping: false });
+            }, 1500);
+        };
+
+        window.handleBullOffInit = () => {
+            const order = state.activeGame.players.map((_, i) => i).sort(() => Math.random() - 0.5);
+            setState({ bullOff: { order, currentTurn: 0, hits: {}, winner: null, isTie: false }, starterMode: 'BULL_OFF' });
+        };
+
+        window.handleDartboardClick = (event) => {
+            const { bullOff, activeGame } = state;
+            if (bullOff.winner !== null || bullOff.isTie || !activeGame) return;
+            
+            const rect = event.currentTarget.getBoundingClientRect();
+            const xPct = ((event.clientX - rect.left) / rect.width) * 100;
+            const yPct = ((event.clientY - rect.top) / rect.height) * 100;
+            const distance = Math.sqrt(Math.pow(xPct - 50, 2) + Math.pow(yPct - 50, 2));
+            const isWall = distance > 48;
+
+            const currentThrowerIdx = bullOff.order[bullOff.currentTurn];
+            const newHits = { ...bullOff.hits, [currentThrowerIdx]: { xPct, yPct, distance, isWall } };
+
+            let updates = { hits: newHits };
+
+            if (bullOff.currentTurn < bullOff.order.length - 1) {
+                updates.currentTurn = bullOff.currentTurn + 1;
+            } else {
+                let minDistance = Infinity;
+                let winnerIdx = null;
+                let isTie = false;
+                for (const [idxStr, hit] of Object.entries(newHits)) {
+                    const idx = parseInt(idxStr);
+                    if (hit.distance < minDistance) { minDistance = hit.distance; winnerIdx = idx; isTie = false; } 
+                    else if (Math.abs(hit.distance - minDistance) < 1) { isTie = true; }
+                }
+                updates.isTie = isTie;
+                updates.winner = isTie ? null : winnerIdx;
+            }
+            setState({ bullOff: { ...bullOff, ...updates } });
+        };
+
+        // --- In-Game ---
+        window.handleAddDart = (base, fixedMultiplier) => {
+            if (state.currentDarts.length >= 3) return;
+            const mult = fixedMultiplier || state.inputMultiplier;
+            setState({ currentDarts: [...state.currentDarts, { base, multiplier: mult }], inputMultiplier: 1 });
+        };
+
+        window.handleUndoDart = () => {
+            setState({ currentDarts: state.currentDarts.slice(0, -1) });
+        };
+
+        window.submitTurn = () => {
+            if (!state.activeGame || state.currentDarts.length === 0) return;
+
+            const activeGame = state.activeGame;
+            const currentPlayer = activeGame.players[activeGame.currentPlayerIndex];
+            const playerToUpdate = JSON.parse(JSON.stringify(currentPlayer)); // Deep copy for logic
+
+            let tempScore = playerToUpdate.score;
+            let isBust = false;
+            let validDartsThrown = 0;
+            let attemptsInTurn = 0;
+            let checkoutsInTurn = 0;
+
+            for (let i = 0; i < state.currentDarts.length; i++) {
+                const dart = state.currentDarts[i];
+                const dartScore = dart.base * dart.multiplier;
+
+                if (state.outMode === 'Double' && ((tempScore <= 40 && tempScore % 2 === 0) || tempScore === 50)) attemptsInTurn += 1;
+                else if (state.outMode === 'Single' && tempScore <= 60 && (tempScore <= 20 || tempScore === 25 || tempScore === 50 || tempScore % 2 === 0 || tempScore % 3 === 0)) attemptsInTurn += 1;
+
+                tempScore -= dartScore;
+                validDartsThrown += 1;
+
+                if (tempScore < 0 || (tempScore === 1 && state.outMode === 'Double') || (tempScore === 0 && state.outMode === 'Double' && dart.multiplier !== 2)) {
+                    isBust = true; break; 
+                }
+                if (tempScore === 0) { checkoutsInTurn += 1; break; }
+            }
+
+            const appliedDarts = state.currentDarts.slice(0, validDartsThrown); 
+            const legDartsBeforeTurn = playerToUpdate.history.reduce((acc, t) => acc + t.length, 0);
+
+            playerToUpdate.stats.checkoutAttempts += attemptsInTurn;
+            playerToUpdate.stats.checkouts += checkoutsInTurn;
+            const roundTotal = appliedDarts.reduce((acc, d) => acc + (d.base * d.multiplier), 0);
+
+            let newTurnNotification = null;
+
+            if (isBust) {
+                playerToUpdate.stats.totalDarts += 3;
+                playerToUpdate.stats.first9Darts += Math.max(0, Math.min(3, 9 - legDartsBeforeTurn));
+                const paddedDarts = [...appliedDarts];
+                while (paddedDarts.length < 3) paddedDarts.push({ base: 0, multiplier: 1 });
+                playerToUpdate.history.push(paddedDarts);
+                newTurnNotification = { type: 'BUST', playerName: playerToUpdate.name };
+                playSound('BUST');
+            } else {
+                playerToUpdate.stats.totalDarts += validDartsThrown;
+                playerToUpdate.score = tempScore;
+                playerToUpdate.stats.totalScore += roundTotal;
+                for (let i = 0; i < validDartsThrown; i++) {
+                    if (legDartsBeforeTurn + i < 9) {
+                        playerToUpdate.stats.first9Score += (appliedDarts[i].base * appliedDarts[i].multiplier);
+                        playerToUpdate.stats.first9Darts += 1;
+                    }
+                }
+                playerToUpdate.history.push(appliedDarts);
+                if (roundTotal === 180) { newTurnNotification = { type: '180', playerName: playerToUpdate.name }; playSound('180'); }
+            }
+
+            const updatedPlayers = [...activeGame.players];
+            updatedPlayers[activeGame.currentPlayerIndex] = playerToUpdate;
+
+            if (tempScore === 0 && !isBust) {
+                playerToUpdate.legsWon += 1;
+                let matchWon = false;
+                let setWon = false;
+
+                if (activeGame.matchFormat === 'SETS') {
+                    if (playerToUpdate.legsWon >= activeGame.targetLegs) {
+                        playerToUpdate.setsWon += 1;
+                        setWon = true;
+                        updatedPlayers.forEach(p => p.legsWon = 0);
+                        if (playerToUpdate.setsWon >= activeGame.targetSets) matchWon = true;
+                    }
+                } else {
+                    if (playerToUpdate.legsWon >= activeGame.targetLegs) matchWon = true;
+                }
+
+                if (matchWon) {
+                    const p1Score = activeGame.matchFormat === 'SETS' ? updatedPlayers[0].setsWon : updatedPlayers[0].legsWon;
+                    const p2Score = activeGame.players.length > 1 ? (activeGame.matchFormat === 'SETS' ? updatedPlayers[1].setsWon : updatedPlayers[1].legsWon) : 0;
+                    
+                    let updates = { activeGame: { ...activeGame, players: updatedPlayers }, view: 'MATCH_STATS', currentDarts: [], inputMultiplier: 1 };
+
+                    if (activeGame.mode === 'TOURNAMENT') {
+                        const updatedRounds = JSON.parse(JSON.stringify(state.rounds));
+                        const matchIndex = updatedRounds[state.currentRoundIndex].findIndex(m => m.id === activeGame.matchId);
+                        updatedRounds[state.currentRoundIndex][matchIndex] = { ...updatedRounds[state.currentRoundIndex][matchIndex], winner: playerToUpdate, score1: p1Score, score2: p2Score };
+                        updates.rounds = updatedRounds;
+                    } else if (activeGame.mode === 'LEAGUE') {
+                        const updatedLeague = JSON.parse(JSON.stringify(state.leagueMatches));
+                        const matchIndex = updatedLeague.findIndex(m => m.id === activeGame.matchId);
+                        updatedLeague[matchIndex] = { ...updatedLeague[matchIndex], winner: playerToUpdate, score1: p1Score, score2: p2Score };
+                        updates.leagueMatches = updatedLeague;
+                    }
+                    setState(updates);
+                } else {
+                    updatedPlayers.forEach(p => { p.score = state.gameMode; p.history = []; });
+                    const nextStarter = (activeGame.startingPlayerIndex + 1) % activeGame.players.length;
+                    setState({ 
+                        activeGame: { ...activeGame, players: updatedPlayers, startingPlayerIndex: nextStarter, currentPlayerIndex: nextStarter },
+                        turnNotification: { type: setWon ? 'SET_WON' : 'LEG_WON', playerName: playerToUpdate.name },
+                        currentDarts: [], inputMultiplier: 1
+                    });
+                }
+                return;
+            }
+
+            setState({ 
+                activeGame: { ...activeGame, players: updatedPlayers, currentPlayerIndex: (activeGame.currentPlayerIndex + 1) % activeGame.players.length },
+                currentDarts: [], inputMultiplier: 1, turnNotification: newTurnNotification
+            });
+        };
+
+        window.handleStatsContinue = () => {
+            if (!state.activeGame) return;
+            if (state.activeGame.mode === 'TOURNAMENT') setState({view: 'BRACKET'});
+            else if (state.activeGame.mode === 'LEAGUE') setState({view: 'LEAGUE_HUB'});
+            else window.resetApp();
+        };
+
+        // ==========================================
+        // 5. RENDER SYSTEM (Template Literals)
+        // ==========================================
+        const mobileContainerClasses = "mobile-container";
+        const playerColors = ['#38bdf8', '#facc15', '#fb7185', '#a78bfa'];
+        const wedgeAngles = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
+
+        function render() {
+            if (!state.isDbLoaded) return;
+            const root = document.getElementById('root');
+            
+            let html = '';
+            switch(state.view) {
+                case 'SETUP': html = renderSetup(); break;
+                case 'BRACKET': html = renderBracket(); break;
+                case 'LEAGUE_HUB': html = renderLeagueHub(); break;
+                case 'DECIDE_STARTER': html = renderDecideStarter(); break;
+                case 'MATCH': html = renderMatch(); break;
+                case 'MATCH_STATS': html = renderMatchStats(); break;
+            }
+            
+            // Input Value Preservation für Setup
+            let playerInputVal = '';
+            if(state.view === 'SETUP') {
+                const el = document.getElementById('newPlayerInput');
+                if(el) playerInputVal = el.value;
+            }
+
+            root.innerHTML = html;
+
+            if(state.view === 'SETUP') {
+                const el = document.getElementById('newPlayerInput');
+                if(el && playerInputVal) { el.value = playerInputVal; el.focus(); }
+            }
+        }
+
+        function renderSetup() {
+            return `
+            <div class="${mobileContainerClasses} p-4 md:p-8">
+              <div class="max-w-md mx-auto w-full glass-panel p-6 md:p-8 rounded-3xl shadow-2xl shadow-indigo-900/10 mt-4 md:mt-10">
+                <h1 class="text-4xl font-black mb-8 neon-text tracking-tight text-center">Dart Tracker</h1>
+                
+                <div class="space-y-6">
+                  <div>
+                    <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3 ml-1 text-center">Spielmodus</h2>
+                    <div class="flex bg-slate-900/50 p-1.5 rounded-2xl border border-slate-800">
+                      ${['STANDARD', 'TOURNAMENT', 'LEAGUE'].map(mode => `
+                        <button onclick="setAppMode('${mode}')" class="flex-1 py-3 flex items-center justify-center rounded-xl font-bold text-xs md:text-sm transition-all active:scale-95 text-center ${state.appMode === mode ? 'bg-gradient-to-br from-indigo-500 to-blue-600 shadow-md text-white' : 'text-slate-400 hover:text-slate-200'}">
+                          ${mode === 'STANDARD' ? 'Match' : mode === 'TOURNAMENT' ? 'Turnier' : 'Liga'}
+                        </button>
+                      `).join('')}
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-4">
+                    <div class="flex flex-col">
+                      <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3 ml-1 text-center">Punkte</h2>
+                      <div class="flex bg-slate-900/50 p-1.5 rounded-2xl border border-slate-800 h-full">
+                        ${[301, 501].map(mode => `
+                          <button onclick="setGameMode(${mode})" class="flex-1 py-3 flex items-center justify-center rounded-xl font-bold transition-all active:scale-95 text-center ${state.gameMode === mode ? 'bg-slate-700 text-white shadow' : 'text-slate-400'}">${mode}</button>
+                        `).join('')}
+                      </div>
+                    </div>
+                    <div class="flex flex-col">
+                      <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3 ml-1 text-center">Checkout</h2>
+                      <div class="flex bg-slate-900/50 p-1.5 rounded-2xl border border-slate-800 h-full">
+                        ${['Single', 'Double'].map(out => `
+                          <button onclick="setOutMode('${out}')" class="flex-1 py-3 flex items-center justify-center rounded-xl font-bold text-sm transition-all active:scale-95 text-center ${state.outMode === out ? 'bg-emerald-600 text-white shadow' : 'text-slate-400'}">${out}</button>
+                        `).join('')}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3 ml-1 text-center">Format</h2>
+                    <div class="flex gap-2 mb-4">
+                      <button onclick="setMatchFormat('LEGS')" class="flex-1 py-3 flex items-center justify-center text-center rounded-2xl font-bold transition-all active:scale-95 text-sm ${state.matchFormat === 'LEGS' ? 'bg-blue-600 shadow-lg shadow-blue-900/20 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}">Nur Legs</button>
+                      <button onclick="setMatchFormat('SETS')" class="flex-1 py-3 flex items-center justify-center text-center rounded-2xl font-bold transition-all active:scale-95 text-sm ${state.matchFormat === 'SETS' ? 'bg-blue-600 shadow-lg shadow-blue-900/20 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}">Sets & Legs</button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                      <div class="flex items-center justify-between bg-slate-900/80 rounded-2xl p-2 border border-slate-800">
+                        <span class="text-xs font-bold text-slate-300 ml-3">Legs to Win</span>
+                        <div class="flex gap-1 items-center bg-slate-800 p-1 rounded-xl">
+                          <button onclick="setTargetLegs(${state.targetLegs - 1})" class="bg-slate-700 active:bg-slate-600 w-8 h-8 rounded-lg font-bold transition-transform active:scale-90 flex items-center justify-center">-</button>
+                          <span class="font-black w-6 text-center">${state.targetLegs}</span>
+                          <button onclick="setTargetLegs(${state.targetLegs + 1})" class="bg-slate-700 active:bg-slate-600 w-8 h-8 rounded-lg font-bold transition-transform active:scale-90 flex items-center justify-center">+</button>
+                        </div>
+                      </div>
+                      ${state.matchFormat === 'SETS' ? `
+                      <div class="flex items-center justify-between bg-slate-900/80 rounded-2xl p-2 border border-slate-800">
+                        <span class="text-xs font-bold text-slate-300 ml-3">Sets to Win</span>
+                        <div class="flex gap-1 items-center bg-slate-800 p-1 rounded-xl">
+                          <button onclick="setTargetSets(${state.targetSets - 1})" class="bg-slate-700 active:bg-slate-600 w-8 h-8 rounded-lg font-bold transition-transform active:scale-90 flex items-center justify-center">-</button>
+                          <span class="font-black w-6 text-center">${state.targetSets}</span>
+                          <button onclick="setTargetSets(${state.targetSets + 1})" class="bg-slate-700 active:bg-slate-600 w-8 h-8 rounded-lg font-bold transition-transform active:scale-90 flex items-center justify-center">+</button>
+                        </div>
+                      </div>` : ''}
+                    </div>
+                  </div>
+
+                  <div class="pt-2 border-t border-slate-800">
+                    <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3 ml-1 flex justify-between">
+                      <span>Kader</span> <span class="bg-indigo-500/20 text-indigo-300 px-2 rounded-full">${state.players.length} Spieler</span>
+                    </h2>
+                    <div class="flex gap-2 mb-4">
+                      <input id="newPlayerInput" type="text" onkeydown="handlePlayerInputKey(event)" placeholder="Neuer Spieler..." class="flex-1 bg-slate-900 border border-slate-700 rounded-2xl px-5 py-3 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 font-semibold transition-all"/>
+                      <button onclick="addPlayer()" class="bg-slate-700 text-white px-6 py-3 rounded-2xl font-black hover:bg-slate-600 active:scale-95 transition-all shadow-md flex items-center justify-center">+</button>
+                    </div>
+                    <ul class="space-y-2 max-h-40 overflow-y-auto pr-2 no-scrollbar">
+                      ${state.players.map(p => `
+                        <li class="flex justify-between items-center bg-slate-800/50 px-5 py-3.5 rounded-2xl border border-slate-700/50">
+                          <span class="font-bold text-slate-200">${p.name}</span>
+                          <button onclick="removePlayer('${p.id}')" class="text-rose-400 active:text-rose-300 font-black px-2 active:scale-90 transition-transform">✕</button>
+                        </li>
+                      `).join('')}
+                    </ul>
+                  </div>
+                </div>
+
+                ${state.errorMsg ? `<div class="mt-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 p-3 rounded-xl text-sm font-bold text-center">${state.errorMsg}</div>` : ''}
+                
+                <button onclick="startApp()" class="w-full mt-8 bg-gradient-to-r from-blue-600 to-indigo-600 py-5 rounded-2xl font-black text-xl transition-all active:scale-[0.98] shadow-xl shadow-indigo-600/20 flex items-center justify-center">
+                  ${state.appMode === 'TOURNAMENT' ? 'Turnier generieren' : state.appMode === 'LEAGUE' ? 'Liga erstellen' : 'Weiter zur Auslosung'}
+                </button>
+              </div>
+            </div>
+            `;
+        }
+
+        function renderBracket() {
+            const isTournamentFinished = state.rounds.length > 0 && state.rounds[state.rounds.length - 1].length === 1 && state.rounds[state.rounds.length - 1][0].winner !== null;
+            const tournamentWinner = isTournamentFinished ? state.rounds[state.rounds.length - 1][0].winner : null;
+
+            let html = `
+            <div class="${mobileContainerClasses}">
+              <div class="p-4 md:p-6 border-b border-slate-800/80 flex justify-between items-center glass-panel z-20">
+                 <h1 class="text-xl md:text-2xl font-black neon-text tracking-tight">Turnierbaum</h1>
+                 <button onclick="resetApp()" class="text-xs bg-slate-800 text-slate-300 px-4 py-2.5 rounded-xl active:scale-95 transition-transform font-bold border border-slate-700">Beenden</button>
+              </div>`;
+
+            if (tournamentWinner) {
+                html += `
+                <div class="m-4 md:m-8 bg-gradient-to-br from-emerald-500/20 to-emerald-900/40 border border-emerald-500/30 p-8 rounded-3xl text-center shadow-2xl backdrop-blur-sm z-20">
+                  <h2 class="text-sm font-bold text-emerald-400 tracking-widest uppercase mb-2">Champion</h2>
+                  <p class="text-4xl md:text-6xl font-black text-white drop-shadow-md">${tournamentWinner.name}</p>
+                </div>`;
+            }
+
+            html += `<div class="flex-1 overflow-auto p-6 md:p-10 no-scrollbar relative">
+                 <div class="flex flex-row items-stretch pb-10 w-max mx-auto min-h-[70vh] gap-16">`;
+
+            state.rounds.forEach((round, rIndex) => {
+                html += `
+                  <div class="flex flex-col w-64 md:w-72 flex-shrink-0 relative">
+                     <div class="absolute -top-10 left-0 right-0 text-center font-bold text-slate-500 uppercase tracking-widest text-xs">
+                       ${rIndex === state.rounds.length - 1 && round.length === 1 ? 'Finale' : `Runde ${rIndex + 1}`}
+                     </div>`;
+                     
+                round.forEach((match, mIndex) => {
+                    html += `
+                       <div class="relative flex flex-col justify-center flex-1 py-4">
+                          ${rIndex < state.rounds.length - 1 ? `<div class="absolute left-full w-8 border-r-2 border-indigo-500/30 ${mIndex % 2 === 0 ? 'top-1/2 bottom-0 border-t-2 rounded-tr-xl' : 'bottom-1/2 top-0 border-b-2 rounded-br-xl'}"></div>` : ''}
+                          ${rIndex > 0 ? `<div class="absolute right-full top-1/2 w-8 border-t-2 border-indigo-500/30"></div>` : ''}
+
+                          <div class="glass-panel p-1 rounded-2xl shadow-xl z-10 relative">
+                            <div class="bg-slate-900/90 rounded-xl overflow-hidden">
+                              <div class="flex justify-between items-center p-3 border-b border-slate-800 ${match.winner?.id === match.player1.id ? 'bg-emerald-500/10' : ''}">
+                                <span class="font-bold truncate mr-2 ${match.winner?.id === match.player1.id ? 'text-emerald-400' : 'text-slate-200'}">${match.player1.name}</span>
+                                ${match.winner ? `<span class="font-black text-lg">${match.score1}</span>` : ''}
+                              </div>
+                              <div class="flex justify-between items-center p-3 ${match.winner?.id === match.player2?.id ? 'bg-emerald-500/10' : ''}">
+                                <span class="font-bold truncate mr-2 ${match.winner?.id === match.player2?.id ? 'text-emerald-400' : 'text-slate-200'}">${match.player2 ? match.player2.name : '<span class="text-slate-600 italic">Freilos</span>'}</span>
+                                ${match.winner && match.player2 ? `<span class="font-black text-lg">${match.score2}</span>` : ''}
+                              </div>
+                            </div>
+                            ${!match.winner && match.player2 && rIndex === state.currentRoundIndex ? `
+                              <div class="p-2">
+                                <button onclick="startMatchById('${match.id}', 'TOURNAMENT')" class="w-full bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600 hover:text-white py-3 rounded-xl font-bold text-sm transition-all active:scale-95 border border-indigo-500/30 flex items-center justify-center">
+                                  Match starten
+                                </button>
+                              </div>` : ''}
+                          </div>
+                       </div>`;
+                });
+                html += `</div>`;
+            });
+
+            if (!isTournamentFinished && state.rounds[state.currentRoundIndex].every(m => m.winner)) {
+                html += `
+                  <div class="flex flex-col justify-center pl-8">
+                    <button onclick="advanceTournamentRound()" class="bg-gradient-to-r from-emerald-500 to-teal-600 py-6 px-8 rounded-3xl font-black text-lg active:scale-95 shadow-xl transition-transform relative z-10 flex items-center justify-center">
+                       Nächste Runde →
+                    </button>
+                    <div class="absolute right-full top-1/2 w-8 border-t-2 border-indigo-500/30"></div>
+                  </div>`;
+            }
+
+            html += `</div></div></div>`;
+            return html;
+        }
+
+        function renderLeagueHub() {
+            const standings = getLeagueStandings();
+            const isLeagueFinished = state.leagueMatches.every(m => m.winner !== null);
+
+            let html = `
+            <div class="${mobileContainerClasses}">
+              <div class="p-4 md:p-6 border-b border-slate-800/80 flex justify-between items-center glass-panel sticky top-0 z-20">
+                 <h1 class="text-xl md:text-2xl font-black neon-text tracking-tight">Liga Zentrale</h1>
+                 <button onclick="resetApp()" class="text-xs bg-slate-800 text-slate-300 px-4 py-2.5 rounded-xl active:scale-95 transition-transform font-bold border border-slate-700">Beenden</button>
+              </div>
+              <div class="p-4 md:p-8 max-w-5xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div class="lg:col-span-7 flex flex-col gap-6">`;
+                
+            if (isLeagueFinished) {
+                html += `
+                  <div class="bg-gradient-to-r from-emerald-600 to-teal-700 p-6 rounded-3xl shadow-xl flex items-center justify-between">
+                    <div>
+                      <h3 class="text-emerald-200 font-bold text-sm tracking-widest uppercase mb-1">Liga Champion</h3>
+                      <p class="text-3xl font-black text-white">${standings[0]?.player.name}</p>
+                    </div>
+                    <div class="text-6xl">🏆</div>
+                  </div>`;
+            }
+
+            html += `
+                  <div class="glass-panel p-6 rounded-3xl h-fit shadow-xl">
+                    <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Tabelle</h2>
+                    <div class="overflow-x-auto no-scrollbar">
+                      <table class="w-full text-left border-collapse">
+                        <thead>
+                          <tr class="text-slate-500 text-xs uppercase tracking-wider border-b border-slate-800">
+                            <th class="pb-3 pl-2">Pl.</th><th class="pb-3">Spieler</th><th class="pb-3 text-center">Sp.</th><th class="pb-3 text-center pr-2">Pts</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          ${standings.map((row, idx) => `
+                            <tr class="border-b border-slate-800/50 last:border-0 hover:bg-slate-800/30 transition-colors">
+                              <td class="py-4 pl-2 font-black text-slate-400 text-sm">${idx + 1}.</td>
+                              <td class="py-4 font-bold text-slate-200 truncate pr-2 max-w-[120px]">${row.player.name}</td>
+                              <td class="py-4 text-center font-semibold text-slate-400">${row.played}</td>
+                              <td class="py-4 text-center font-black text-indigo-400 pr-2">${row.points}</td>
+                            </tr>
+                          `).join('')}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+                <div class="lg:col-span-5">
+                  <div class="glass-panel p-6 rounded-3xl shadow-xl">
+                    <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Spielplan</h2>
+                    <div class="space-y-3 max-h-[50vh] md:max-h-[60vh] overflow-y-auto no-scrollbar pr-1">
+                      ${state.leagueMatches.map(match => `
+                        <div class="bg-slate-900/80 p-1 rounded-2xl border border-slate-800 shadow-md">
+                          <div class="flex flex-col sm:flex-row items-center p-2 gap-3">
+                            <div class="flex-1 w-full text-sm">
+                               <div class="flex justify-between items-center p-2 rounded-lg ${match.winner?.id === match.player1.id ? 'bg-emerald-500/10' : ''}">
+                                  <span class="font-bold truncate ${match.winner?.id === match.player1.id ? 'text-emerald-400' : 'text-slate-300'}">${match.player1.name}</span>
+                                  ${match.winner ? `<span class="font-black text-lg">${match.score1}</span>` : ''}
+                               </div>
+                               <div class="flex justify-between items-center p-2 rounded-lg mt-1 ${match.winner?.id === match.player2?.id ? 'bg-emerald-500/10' : ''}">
+                                  <span class="font-bold truncate ${match.winner?.id === match.player2?.id ? 'text-emerald-400' : 'text-slate-300'}">${match.player2?.name}</span>
+                                  ${match.winner ? `<span class="font-black text-lg">${match.score2}</span>` : ''}
+                               </div>
+                            </div>
+                            ${!match.winner ? `
+                              <button onclick="startMatchById('${match.id}', 'LEAGUE')" class="w-full sm:w-auto bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 px-5 py-4 sm:py-0 sm:h-full rounded-xl font-bold transition-all active:scale-95 text-xs uppercase tracking-wider flex items-center justify-center">
+                                Spielen
+                              </button>
+                            ` : `<div class="px-4 py-2 sm:h-full flex items-center justify-center bg-slate-800 rounded-xl text-xs font-bold text-slate-500 uppercase tracking-wider">Done</div>`}
+                          </div>
+                        </div>
+                      `).join('')}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            `;
+            return html;
+        }
+
+        function renderDecideStarter() {
+            let html = `<div class="${mobileContainerClasses} justify-center p-4 relative">`;
+
+            if (state.bullOff.winner !== null) {
+                html += `
+                <div class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/95 backdrop-blur-xl cursor-pointer p-4" onclick="startWithPlayer(${state.bullOff.winner})">
+                   <div class="text-center animate-bounce px-4">
+                      <p class="text-emerald-400 font-bold tracking-widest uppercase mb-4 text-sm">Ausbullen Gewonnen</p>
+                      <h2 class="text-5xl md:text-7xl font-black text-white mb-2">${state.activeGame.players[state.bullOff.winner].name}</h2>
+                      <p class="text-xl text-slate-400 font-semibold">Wirft zuerst!</p>
+                   </div>
+                   <p class="mt-16 text-xs font-bold uppercase tracking-widest bg-white text-slate-900 px-8 py-4 rounded-full shadow-xl shadow-white/10 active:scale-95 transition-transform">
+                      Tap für Match-Start
+                   </p>
+                </div>`;
+            }
+
+            html += `
+              <div class="glass-panel p-8 rounded-3xl shadow-2xl w-full max-w-md mx-auto text-center border border-slate-800 relative overflow-hidden">
+                <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-500"></div>
+                <h2 class="text-2xl font-black mb-8 text-white tracking-tight">Wer beginnt?</h2>`;
+                
+            if (state.starterMode === 'SELECT') {
+                html += `
+                  <div class="flex flex-col gap-4">
+                    <button onclick="handleCoinTossInit()" class="bg-slate-800 border border-slate-700 py-5 rounded-2xl font-bold text-lg active:scale-95 transition-all shadow-md hover:bg-slate-700 flex items-center justify-center gap-3">
+                      <span class="text-2xl">🪙</span> Münzwurf
+                    </button>
+                    <button onclick="handleBullOffInit()" class="bg-gradient-to-r from-rose-600 to-pink-600 py-5 rounded-2xl font-bold text-lg active:scale-95 transition-all shadow-lg shadow-rose-900/20 flex items-center justify-center gap-3">
+                      <span class="text-2xl">🎯</span> Bull-Off
+                    </button>
+                    <div class="relative my-6 flex items-center justify-center">
+                      <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-700"></div></div>
+                      <span class="relative bg-[#1e293b] px-4 text-slate-500 text-[10px] font-black uppercase tracking-widest rounded-full">Manuell</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                      ${state.activeGame.players.map((p, idx) => `
+                        <button onclick="startWithPlayer(${idx})" class="bg-slate-900/50 py-3 flex items-center justify-center rounded-xl font-bold text-slate-300 text-sm border border-slate-800 hover:border-slate-600 active:scale-95 transition-all">
+                          ${p.name}
+                        </button>
+                      `).join('')}
+                    </div>
+                  </div>`;
+            } else if (state.starterMode === 'COIN_TOSS') {
+                html += `
+                  <div class="flex flex-col items-center py-4">
+                     <div class="w-32 h-32 rounded-full bg-gradient-to-br from-yellow-300 to-yellow-600 border-4 border-yellow-200 flex items-center justify-center text-6xl shadow-2xl shadow-yellow-600/30 mb-8 ${state.isCoinFlipping ? 'coin-flip-anim' : ''}">
+                        ${state.coinWinner !== null ? '👑' : '🪙'}
+                     </div>
+                     <div class="transition-opacity duration-500 w-full ${state.coinWinner !== null ? 'opacity-100' : 'opacity-0'}">
+                       ${state.coinWinner !== null ? `
+                         <p class="text-indigo-400 font-bold uppercase tracking-widest text-xs mb-2">Münzwurf Sieger</p>
+                         <h2 class="text-3xl font-black text-white mb-8 truncate px-2">${state.activeGame.players[state.coinWinner].name}</h2>
+                         <button onclick="startWithPlayer(${state.coinWinner})" class="w-full bg-white text-slate-900 py-4 flex items-center justify-center rounded-2xl font-black text-lg active:scale-95 transition-transform shadow-xl shadow-white/10">
+                           Match starten
+                         </button>
+                       ` : ''}
+                     </div>
+                  </div>`;
+            } else if (state.starterMode === 'BULL_OFF') {
+                html += `<div class="flex flex-col items-center w-full">`;
+                
+                if (state.bullOff.winner === null && !state.bullOff.isTie) {
+                    html += `
+                        <div class="mb-6 bg-slate-900/80 px-6 py-3 rounded-2xl border border-slate-800 inline-block">
+                          <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Am Oche</p>
+                          <p class="text-2xl font-black truncate max-w-[200px]" style="color: ${playerColors[state.bullOff.currentTurn % playerColors.length]}">
+                            ${state.activeGame.players[state.bullOff.order[state.bullOff.currentTurn]].name}
+                          </p>
+                        </div>`;
+                } else if (state.bullOff.isTie) {
+                    html += `
+                        <div class="mb-6 bg-yellow-900/20 border border-yellow-700/50 px-6 py-3 rounded-2xl">
+                          <p class="text-xl font-black text-yellow-500">Unentschieden!</p>
+                        </div>`;
+                } else {
+                    html += `<div class="mb-6 opacity-0 h-[76px]"></div>`;
+                }
+
+                html += `
+                    <div class="relative w-full aspect-square max-w-[280px] shadow-2xl rounded-full overflow-hidden border-[10px] border-slate-950 bg-slate-800">
+                       <svg viewBox="0 0 100 100" onclick="handleDartboardClick(event)" class="w-full h-full cursor-crosshair">
+                          <rect width="100" height="100" fill="#1e293b" /> 
+                          <circle cx="50" cy="50" r="48" fill="#020617" />
+                          ${wedgeAngles.map((num, i) => `
+                             <g transform="rotate(${i*18 - 9} 50 50)">
+                                <path d="${getWedgePath(40)}" fill="${i%2 === 0 ? '#ef4444' : '#10b981'}" />
+                                <path d="${getWedgePath(38)}" fill="${i%2 === 0 ? '#0f172a' : '#fef08a'}" />
+                                <path d="${getWedgePath(26)}" fill="${i%2 === 0 ? '#ef4444' : '#10b981'}" />
+                                <path d="${getWedgePath(24)}" fill="${i%2 === 0 ? '#0f172a' : '#fef08a'}" />
+                             </g>
+                          `).join('')}
+                          <circle cx="50" cy="50" r="7" fill="#10b981" />
+                          <circle cx="50" cy="50" r="3.5" fill="#ef4444" />
+                          ${wedgeAngles.map((num, i) => {
+                             const a = (i * 18 - 90) * Math.PI / 180;
+                             const x = 50 + 44 * Math.cos(a);
+                             const y = 50 + 44 * Math.sin(a);
+                             return `<text x="${x}" y="${y}" font-size="4.5" fill="white" text-anchor="middle" dominant-baseline="central" font-weight="800" opacity="0.8">${num}</text>`;
+                          }).join('')}
+                       </svg>
+                       ${Object.entries(state.bullOff.hits).map(([idxStr, hit]) => {
+                           const idx = parseInt(idxStr);
+                           const orderPos = state.bullOff.order.indexOf(idx);
+                           return `
+                             <div class="absolute w-4 h-4 -ml-2 -mt-2 rounded-full border-[3px] border-white shadow-[0_0_15px_rgba(0,0,0,0.8)] z-10 pointer-events-none flex items-center justify-center transition-all" style="left: ${hit.xPct}%; top: ${hit.yPct}%; background-color: ${playerColors[orderPos % playerColors.length]}">
+                               ${hit.isWall ? `<span class="absolute -top-8 text-rose-400 text-[9px] font-black uppercase tracking-wider bg-slate-900 px-2 py-1 rounded shadow-lg border border-rose-900/50">Wand</span>` : ''}
+                             </div>
+                           `;
+                       }).join('')}
+                    </div>
+                    <div class="mt-8 w-full h-[60px]">
+                      ${state.bullOff.isTie ? `
+                        <button onclick="handleBullOffInit()" class="w-full bg-slate-700 text-white py-4 flex items-center justify-center rounded-2xl font-bold text-lg active:scale-95 transition-transform shadow-lg border border-slate-600">
+                          ↻ Neues Ausbullen
+                        </button>
+                      ` : ''}
+                    </div>
+                </div>`;
+            }
+            html += `</div></div>`;
+            return html;
+        }
+
+        function renderMatchStats() {
+            const winner = state.activeGame.players.find(p => state.activeGame.matchFormat === 'SETS' ? p.setsWon >= state.activeGame.targetSets : p.legsWon >= state.activeGame.targetLegs);
+
+            return `
+            <div class="${mobileContainerClasses} p-4 md:p-8">
+              <div class="max-w-4xl mx-auto w-full flex-1 flex flex-col justify-center">
+                <div class="glass-panel p-6 md:p-10 rounded-3xl shadow-2xl relative overflow-hidden">
+                  <div class="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-emerald-400 to-teal-500"></div>
+                  <div class="text-center mb-10 mt-4">
+                    <h2 class="text-sm text-slate-400 font-bold tracking-widest uppercase mb-2">Match Statistik</h2>
+                    ${winner ? `<p class="text-4xl md:text-6xl font-black text-white tracking-tight">${winner.name}</p>` : `<p class="text-2xl md:text-4xl font-bold text-yellow-500">Abgebrochen</p>`}
+                  </div>
+                  <div class="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/50 no-scrollbar mb-10">
+                    <table class="w-full text-left border-collapse min-w-[500px]">
+                      <thead>
+                        <tr class="text-slate-500 text-[10px] md:text-xs uppercase tracking-widest border-b border-slate-800">
+                          <th class="p-4 font-bold">Spieler</th>
+                          <th class="p-4 text-center font-bold">Score</th>
+                          <th class="p-4 text-center font-bold">3-Dart Avg</th>
+                          <th class="p-4 text-center font-bold">First 9 Avg</th>
+                          <th class="p-4 text-center font-bold">Checkout</th>
+                          <th class="p-4 text-center font-bold">Darts Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${state.activeGame.players.map((p, idx) => {
+                          const avg = p.stats.totalDarts > 0 ? ((p.stats.totalScore / p.stats.totalDarts) * 3).toFixed(1) : '0.0';
+                          const first9 = p.stats.first9Darts > 0 ? ((p.stats.first9Score / p.stats.first9Darts) * 3).toFixed(1) : '0.0';
+                          const co = `${p.stats.checkouts} / ${p.stats.checkoutAttempts}`;
+                          const pScore = state.activeGame.matchFormat === 'SETS' ? p.setsWon : p.legsWon;
+                          return `
+                            <tr class="border-t border-slate-800/50 ${idx % 2 !== 0 ? 'bg-slate-800/20' : ''}">
+                              <td class="p-4 font-bold text-sm md:text-base text-slate-200 truncate max-w-[100px]">${p.name}</td>
+                              <td class="p-4 text-center font-black text-xl md:text-2xl text-white">${pScore}</td>
+                              <td class="p-4 text-center font-bold text-indigo-300 text-sm md:text-base">${avg}</td>
+                              <td class="p-4 text-center font-bold text-slate-300 text-sm md:text-base">${first9}</td>
+                              <td class="p-4 text-center font-bold text-emerald-400 text-sm md:text-base">${co}</td>
+                              <td class="p-4 text-center text-slate-500 font-bold">${p.stats.totalDarts}</td>
+                            </tr>
+                          `;
+                        }).join('')}
+                      </tbody>
+                    </table>
+                  </div>
+                  <button onclick="handleStatsContinue()" class="w-full bg-white text-slate-900 py-4 flex items-center justify-center rounded-2xl font-black text-lg active:scale-95 transition-transform shadow-xl shadow-white/10">
+                    ${state.activeGame.mode === 'TOURNAMENT' ? 'Zur Baumübersicht' : state.activeGame.mode === 'LEAGUE' ? 'Zur Liga-Übersicht' : 'Neues Setup'}
+                  </button>
+                </div>
+              </div>
+            </div>
+            `;
+        }
+
+        function renderMatch() {
+            const activePlayer = state.activeGame.players[state.activeGame.currentPlayerIndex];
+            const roundTotal = state.currentDarts.reduce((acc, d) => acc + (d.base * d.multiplier), 0);
+            const projectedScore = activePlayer.score - roundTotal;
+            const checkoutRoute = getCheckoutSuggestion(projectedScore, state.outMode);
+
+            let html = `<div class="${mobileContainerClasses} flex flex-col p-2 md:p-4">`;
+
+            if (state.turnNotification) {
+                html += `
+                <div class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-md cursor-pointer px-4" onclick="setTurnNotification(null)">
+                  <div class="text-center animate-bounce">
+                    ${state.turnNotification.type === '180' ? `<h2 class="text-8xl md:text-9xl font-black text-rose-500 mb-4 drop-shadow-[0_0_30px_rgba(244,63,94,0.6)] tracking-tighter">180!</h2><p class="text-2xl text-white font-bold">${state.turnNotification.playerName}</p>` : ''}
+                    ${state.turnNotification.type === 'BUST' ? `<h2 class="text-5xl md:text-8xl font-black text-slate-500 mb-4 tracking-tighter">NO SCORE</h2><p class="text-xl text-slate-300 font-bold">Überworfen von ${state.turnNotification.playerName}</p>` : ''}
+                    ${state.turnNotification.type === 'LEG_WON' ? `<h2 class="text-5xl md:text-8xl font-black text-emerald-400 mb-4 drop-shadow-[0_0_20px_rgba(52,211,153,0.4)] tracking-tighter">GAME SHOT</h2><p class="text-xl text-white font-bold">${state.turnNotification.playerName} holt das Leg!</p>` : ''}
+                    ${state.turnNotification.type === 'SET_WON' ? `<h2 class="text-5xl md:text-8xl font-black text-blue-400 mb-4 drop-shadow-[0_0_20px_rgba(96,165,250,0.4)] tracking-tighter">SET SHOT</h2><p class="text-xl text-white font-bold">${state.turnNotification.playerName} gewinnt das Set!</p>` : ''}
+                  </div>
+                  <p class="absolute bottom-12 text-slate-400 text-xs font-bold uppercase tracking-widest bg-slate-800/50 px-6 py-3 rounded-full border border-slate-700/50">Tippen zum Fortfahren</p>
+                </div>`;
+            }
+
+            html += `
+              <div class="max-w-2xl mx-auto w-full flex-1 flex flex-col justify-between h-full">
+                <div>
+                  <div class="flex justify-between items-center mb-3 px-2">
+                     <div class="flex flex-col">
+                       <span class="text-sm font-black text-slate-300 tracking-tight">${state.gameMode} • ${state.outMode}</span>
+                       <span class="text-[10px] text-indigo-400 font-bold uppercase tracking-widest">
+                         ${state.activeGame.matchFormat === 'SETS' ? `Best of ${state.activeGame.targetSets} Sets` : `First to ${state.activeGame.targetLegs} Legs`}
+                       </span>
+                     </div>
+                     <button onclick="setView('MATCH_STATS')" class="text-xs bg-slate-800/80 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg active:scale-95 transition-all font-bold flex items-center justify-center">Abbrechen</button>
+                  </div>
+
+                  <div class="flex gap-3 mb-4 overflow-x-auto pb-2 no-scrollbar snap-x">
+                    ${state.activeGame.players.map((p, idx) => {
+                      const isActive = idx === state.activeGame.currentPlayerIndex;
+                      const isStarter = idx === state.activeGame.startingPlayerIndex;
+                      return `
+                        <div class="snap-center flex-1 min-w-[130px] p-4 rounded-3xl border-2 transition-all relative ${isActive ? 'bg-indigo-600/10 border-indigo-500 shadow-[0_0_25px_rgba(99,102,241,0.15)] scale-100' : 'bg-slate-900/50 border-slate-800 scale-95 opacity-80'}">
+                          ${isStarter ? `<div class="absolute top-3 right-3 w-2 h-2 bg-yellow-400 rounded-full shadow-[0_0_8px_rgba(250,204,21,0.8)]"></div>` : ''}
+                          <h3 class="text-xs md:text-sm mb-2 truncate font-bold uppercase tracking-wide ${isActive ? 'text-indigo-300' : 'text-slate-400'}">${p.name}</h3>
+                          <div class="flex gap-3 text-[10px] font-black text-slate-500 mb-1 tracking-widest">
+                            ${state.activeGame.matchFormat === 'SETS' ? `<span>S: <span class="text-slate-200">${p.setsWon}</span></span>` : ''}
+                            <span>L: <span class="text-slate-200">${p.legsWon}</span></span>
+                          </div>
+                          <p class="text-6xl md:text-7xl font-black leading-none tracking-tighter ${isActive ? 'text-white' : 'text-slate-300'}">${p.score}</p>
+                        </div>`;
+                    }).join('')}
+                  </div>
+
+                  <div class="glass-panel p-3 rounded-2xl mb-2">
+                    <div class="grid gap-y-2 items-center" style="grid-template-columns: auto repeat(${state.activeGame.players.length}, 1fr)">
+                      <div class="text-slate-500 text-[9px] font-bold uppercase tracking-widest pl-1">3-Dart Avg</div>
+                      ${state.activeGame.players.map(p => `
+                        <div class="text-center font-black text-[11px] md:text-xs text-slate-200">
+                          ${p.stats.totalDarts > 0 ? ((p.stats.totalScore / p.stats.totalDarts) * 3).toFixed(1) : '0.0'}
+                        </div>
+                      `).join('')}
+                      
+                      <div class="text-slate-500 text-[9px] font-bold uppercase tracking-widest pl-1">First 9 Avg</div>
+                      ${state.activeGame.players.map(p => `
+                        <div class="text-center font-black text-[11px] md:text-xs text-slate-200">
+                          ${p.stats.first9Darts > 0 ? ((p.stats.first9Score / p.stats.first9Darts) * 3).toFixed(1) : '0.0'}
+                        </div>
+                      `).join('')}
+
+                      <div class="text-slate-500 text-[9px] font-bold uppercase tracking-widest pl-1">Checkout</div>
+                      ${state.activeGame.players.map(p => `
+                        <div class="text-center font-black text-[11px] md:text-xs text-emerald-400">
+                          ${p.stats.checkouts}/${p.stats.checkoutAttempts}
+                        </div>
+                      `).join('')}
+
+                      <div class="text-slate-500 text-[9px] font-bold uppercase tracking-widest pl-1">Darts (Leg)</div>
+                      ${state.activeGame.players.map(p => {
+                        const legDarts = p.history.reduce((sum, turn) => sum + turn.length, 0);
+                        return `
+                          <div class="text-center font-black text-[11px] md:text-xs text-slate-400">
+                            ${legDarts}
+                          </div>
+                        `;
+                      }).join('')}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex flex-col mt-auto">
+                  <div class="bg-slate-800 p-3 rounded-t-3xl border-t border-x border-slate-700 flex justify-between items-center min-h-[70px]">
+                     <div class="flex items-center gap-2">
+                        ${[0, 1, 2].map(idx => {
+                          const dart = state.currentDarts[idx];
+                          return `
+                            <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-sm md:text-base font-black transition-all ${dart ? 'bg-indigo-600 border-none text-white shadow-lg shadow-indigo-600/30' : 'bg-slate-900 border border-slate-700 text-slate-600'}">
+                              ${dart ? formatDart(dart) : '-'}
+                            </div>
+                          `;
+                        }).join('')}
+                        <div class="ml-3 text-center">
+                          <span class="block text-[9px] text-slate-400 uppercase font-black tracking-widest">Sum</span>
+                          <span class="font-black text-2xl text-white leading-none tracking-tighter">${roundTotal}</span>
+                        </div>
+                     </div>
+
+                     ${checkoutRoute ? `
+                       <div class="text-right bg-emerald-500/10 px-4 py-2 rounded-2xl border border-emerald-500/20">
+                         <span class="block text-emerald-400 text-[9px] font-black uppercase tracking-widest mb-0.5">Weg</span>
+                         <span class="text-white font-black text-sm md:text-base tracking-tight">${checkoutRoute}</span>
+                       </div>
+                     ` : ''}
+                  </div>
+
+                  <div class="bg-slate-800 p-3 rounded-b-3xl border border-slate-700 shadow-2xl mt-[1px]">
+                    <div class="flex gap-2 mb-3">
+                      <button onclick="setInputMultiplier(1)" class="flex-1 py-3.5 flex items-center justify-center rounded-2xl font-black text-sm transition-all active:scale-95 ${state.inputMultiplier === 1 ? 'bg-slate-200 text-slate-900 shadow-lg' : 'bg-slate-900 text-slate-400 hover:bg-slate-700'}">Single</button>
+                      <button onclick="setInputMultiplier(2)" class="flex-1 py-3.5 flex items-center justify-center rounded-2xl font-black text-sm transition-all active:scale-95 ${state.inputMultiplier === 2 ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' : 'bg-slate-900 text-slate-400 hover:bg-slate-700'}">Double</button>
+                      <button onclick="setInputMultiplier(3)" class="flex-1 py-3.5 flex items-center justify-center rounded-2xl font-black text-sm transition-all active:scale-95 ${state.inputMultiplier === 3 ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30' : 'bg-slate-900 text-slate-400 hover:bg-slate-700'}">Treble</button>
+                    </div>
+
+                    <div class="grid grid-cols-5 gap-2 mb-3">
+                      ${Array.from({length: 20}, (_, i) => i + 1).map(num => `
+                        <button onclick="handleAddDart(${num})" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-slate-700 flex items-center justify-center active:bg-indigo-500 disabled:opacity-50 py-3 md:py-4 rounded-2xl font-black text-xl transition-all active:scale-90 shadow-sm border-b-2 border-slate-900 text-slate-100">${num}</button>
+                      `).join('')}
+                    </div>
+
+                    <div class="grid grid-cols-4 gap-2 mb-4">
+                      <button onclick="handleAddDart(0, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-slate-900 flex items-center justify-center active:bg-slate-700 py-3.5 rounded-2xl font-black text-xs md:text-sm disabled:opacity-50 transition-transform active:scale-95 text-slate-400 border border-slate-700">Miss</button>
+                      <button onclick="handleAddDart(25, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-emerald-900/40 flex items-center justify-center border border-emerald-700/50 active:bg-emerald-800 text-emerald-300 py-3.5 rounded-2xl font-black text-xs md:text-sm disabled:opacity-50 transition-transform active:scale-95">25</button>
+                      <button onclick="handleAddDart(25, 2)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-rose-900/40 flex items-center justify-center border border-rose-700/50 active:bg-rose-800 text-rose-300 py-3.5 rounded-2xl font-black text-xs md:text-sm disabled:opacity-50 transition-transform active:scale-95">50</button>
+                      <button onclick="handleUndoDart()" ${state.currentDarts.length === 0 ? 'disabled' : ''} class="bg-slate-700 flex items-center justify-center active:bg-slate-600 text-slate-300 py-3.5 rounded-2xl font-black text-xs md:text-sm disabled:opacity-50 transition-transform active:scale-95">⌫ Undo</button>
+                    </div>
+
+                    <button onclick="submitTurn()" ${state.currentDarts.length === 0 ? 'disabled' : ''} class="w-full flex items-center justify-center bg-indigo-600 disabled:bg-slate-800 disabled:text-slate-600 py-5 rounded-2xl font-black text-xl transition-all active:scale-[0.98] shadow-xl shadow-indigo-600/20 text-white tracking-wide border-b-4 border-indigo-800 disabled:border-none">
+                      Bestätigen
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>`;
+            return html;
+        }
+
+        // Start App
+        initApp();
+    </script>
+</body>
+</html>
