@@ -53,8 +53,9 @@
             gameMode: 501,
             outMode: 'Double',
             matchFormat: 'LEGS',
-            targetLegs: 3,
-            targetSets: 2,
+            targetLegs: 1,
+            targetSets: 1,
+            isFormatExpanded: false,
             players: [],
             rounds: [],
             leagueMatches: [],
@@ -132,8 +133,8 @@
 
         const formatDart = (d) => {
             if (d.base === 0) return 'Miss';
-            if (d.base === 25 && d.multiplier === 1) return '25';
-            if (d.base === 25 && d.multiplier === 2) return '50';
+            if (d.base === 25 && d.multiplier === 1) return 'Bull';
+            if (d.base === 25 && d.multiplier === 2) return 'D-Bull';
             if (d.multiplier === 1) return `${d.base}`;
             if (d.multiplier === 2) return `D${d.base}`;
             if (d.multiplier === 3) return `T${d.base}`;
@@ -221,6 +222,7 @@
         window.setMatchFormat = (m) => setState({matchFormat: m});
         window.setTargetLegs = (v) => setState({targetLegs: Math.max(1, v)});
         window.setTargetSets = (v) => setState({targetSets: Math.max(1, v)});
+        window.toggleFormatMenu = () => setState({isFormatExpanded: !state.isFormatExpanded});
         window.setInputMultiplier = (m) => setState({inputMultiplier: m});
         window.setView = (v) => setState({view: v});
         window.setTurnNotification = (n) => setState({turnNotification: n});
@@ -264,8 +266,9 @@
         };
 
         window.startApp = () => {
-            if (state.players.length < 1 && state.appMode === 'STANDARD') { setState({errorMsg: 'Mindestens ein Spieler wird benötigt.'}); return; }
-            if (state.players.length < 2 && (state.appMode === 'TOURNAMENT' || state.appMode === 'LEAGUE')) { setState({errorMsg: `Mindestens zwei Spieler für ${state.appMode === 'LEAGUE' ? 'Liga' : 'Turnier'} benötigt.`}); return; }
+            if (state.appMode === 'STANDARD' && state.players.length !== 2) { setState({errorMsg: 'Für ein Match werden exakt 2 Spieler benötigt.'}); return; }
+            if (state.appMode === 'TOURNAMENT' && state.players.length < 2) { setState({errorMsg: 'Für ein Turnier werden mindestens 2 Spieler benötigt.'}); return; }
+            if (state.appMode === 'LEAGUE' && state.players.length < 2) { setState({errorMsg: 'Für eine Liga werden mindestens 2 Spieler benötigt.'}); return; }
             
             let updates = { errorMsg: '', turnNotification: null, ...resetWizardStates() };
 
@@ -344,9 +347,20 @@
             const { bullOff, activeGame } = state;
             if (bullOff.winner !== null || bullOff.isTie || !activeGame) return;
             
+            let clientX = event.clientX;
+            let clientY = event.clientY;
+            
+            // Touch-Event Abfrage für Mobilgeräte hinzugefügt
+            if (event.changedTouches && event.changedTouches.length > 0) {
+                clientX = event.changedTouches[0].clientX;
+                clientY = event.changedTouches[0].clientY;
+            }
+            
+            if (clientX === undefined || clientY === undefined) return;
+
             const rect = event.currentTarget.getBoundingClientRect();
-            const xPct = ((event.clientX - rect.left) / rect.width) * 100;
-            const yPct = ((event.clientY - rect.top) / rect.height) * 100;
+            const xPct = ((clientX - rect.left) / rect.width) * 100;
+            const yPct = ((clientY - rect.top) / rect.height) * 100;
             const distance = Math.sqrt(Math.pow(xPct - 50, 2) + Math.pow(yPct - 50, 2));
             const isWall = distance > 48;
 
@@ -585,31 +599,44 @@
                     </div>
                   </div>
 
-                  <div>
-                    <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3 ml-1 text-center lg:text-left">Format</h2>
-                    <div class="flex gap-2 mb-4">
-                      <button onclick="setMatchFormat('LEGS')" class="flex-1 py-3 flex items-center justify-center text-center rounded-2xl font-bold transition-all active:scale-95 text-sm ${state.matchFormat === 'LEGS' ? 'bg-blue-600 shadow-lg shadow-blue-900/20 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}">Nur Legs</button>
-                      <button onclick="setMatchFormat('SETS')" class="flex-1 py-3 flex items-center justify-center text-center rounded-2xl font-bold transition-all active:scale-95 text-sm ${state.matchFormat === 'SETS' ? 'bg-blue-600 shadow-lg shadow-blue-900/20 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}">Sets & Legs</button>
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
-                      <div class="flex items-center justify-between bg-slate-900/80 rounded-2xl p-2 border border-slate-800">
-                        <span class="text-xs font-bold text-slate-300 ml-2 lg:ml-3">Legs</span>
-                        <div class="flex gap-1 items-center bg-slate-800 p-1 rounded-xl">
-                          <button onclick="setTargetLegs(${state.targetLegs - 1})" class="bg-slate-700 active:bg-slate-600 w-8 h-8 rounded-lg font-bold transition-transform active:scale-90 flex items-center justify-center">-</button>
-                          <span class="font-black w-6 text-center">${state.targetLegs}</span>
-                          <button onclick="setTargetLegs(${state.targetLegs + 1})" class="bg-slate-700 active:bg-slate-600 w-8 h-8 rounded-lg font-bold transition-transform active:scale-90 flex items-center justify-center">+</button>
-                        </div>
+                  <div class="bg-slate-900/50 rounded-2xl border border-slate-800 overflow-hidden">
+                    <button onclick="toggleFormatMenu()" class="w-full flex justify-between items-center p-4 hover:bg-slate-800 transition-colors">
+                      <div class="flex flex-col text-left">
+                        <span class="text-sm font-bold text-slate-400 uppercase tracking-widest">Format</span>
+                        <span class="font-black text-indigo-400 text-sm mt-0.5">
+                          ${state.matchFormat === 'SETS' ? `First to ${state.targetSets} Sets (Best of ${state.targetLegs} Legs)` : `First to ${state.targetLegs} Legs`}
+                        </span>
                       </div>
-                      ${state.matchFormat === 'SETS' ? `
-                      <div class="flex items-center justify-between bg-slate-900/80 rounded-2xl p-2 border border-slate-800">
-                        <span class="text-xs font-bold text-slate-300 ml-2 lg:ml-3">Sets</span>
-                        <div class="flex gap-1 items-center bg-slate-800 p-1 rounded-xl">
-                          <button onclick="setTargetSets(${state.targetSets - 1})" class="bg-slate-700 active:bg-slate-600 w-8 h-8 rounded-lg font-bold transition-transform active:scale-90 flex items-center justify-center">-</button>
-                          <span class="font-black w-6 text-center">${state.targetSets}</span>
-                          <button onclick="setTargetSets(${state.targetSets + 1})" class="bg-slate-700 active:bg-slate-600 w-8 h-8 rounded-lg font-bold transition-transform active:scale-90 flex items-center justify-center">+</button>
+                      <span class="text-slate-400 font-bold text-xl ml-4">${state.isFormatExpanded ? '▲' : '▼'}</span>
+                    </button>
+                    
+                    ${state.isFormatExpanded ? `
+                    <div class="p-4 border-t border-slate-800 bg-slate-900/80">
+                      <div class="flex gap-2 mb-4">
+                        <button onclick="setMatchFormat('LEGS')" class="flex-1 py-3 flex items-center justify-center text-center rounded-xl font-bold transition-all active:scale-95 text-sm ${state.matchFormat === 'LEGS' ? 'bg-blue-600 shadow-md text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}">Nur Legs</button>
+                        <button onclick="setMatchFormat('SETS')" class="flex-1 py-3 flex items-center justify-center text-center rounded-xl font-bold transition-all active:scale-95 text-sm ${state.matchFormat === 'SETS' ? 'bg-blue-600 shadow-md text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}">Sets & Legs</button>
+                      </div>
+                      <div class="grid grid-cols-1 gap-3">
+                        <div class="flex items-center justify-between bg-slate-800/50 rounded-xl p-2 border border-slate-700">
+                          <span class="text-xs font-bold text-slate-300 ml-2">Legs to Win</span>
+                          <div class="flex gap-1 items-center bg-slate-700 p-1 rounded-lg">
+                            <button onclick="setTargetLegs(${state.targetLegs - 1})" class="bg-slate-600 active:bg-slate-500 w-8 h-8 rounded-md font-bold transition-transform active:scale-90 flex items-center justify-center">-</button>
+                            <span class="font-black w-6 text-center">${state.targetLegs}</span>
+                            <button onclick="setTargetLegs(${state.targetLegs + 1})" class="bg-slate-600 active:bg-slate-500 w-8 h-8 rounded-md font-bold transition-transform active:scale-90 flex items-center justify-center">+</button>
+                          </div>
                         </div>
-                      </div>` : ''}
+                        ${state.matchFormat === 'SETS' ? `
+                        <div class="flex items-center justify-between bg-slate-800/50 rounded-xl p-2 border border-slate-700">
+                          <span class="text-xs font-bold text-slate-300 ml-2">Sets to Win</span>
+                          <div class="flex gap-1 items-center bg-slate-700 p-1 rounded-lg">
+                            <button onclick="setTargetSets(${state.targetSets - 1})" class="bg-slate-600 active:bg-slate-500 w-8 h-8 rounded-md font-bold transition-transform active:scale-90 flex items-center justify-center">-</button>
+                            <span class="font-black w-6 text-center">${state.targetSets}</span>
+                            <button onclick="setTargetSets(${state.targetSets + 1})" class="bg-slate-600 active:bg-slate-500 w-8 h-8 rounded-md font-bold transition-transform active:scale-90 flex items-center justify-center">+</button>
+                          </div>
+                        </div>` : ''}
+                      </div>
                     </div>
+                    ` : ''}
                   </div>
                 </div>
 
@@ -881,19 +908,19 @@
 
                 html += `
                     <div class="relative w-full aspect-square max-w-[280px] shadow-2xl rounded-full overflow-hidden border-[10px] border-slate-950 bg-slate-800">
-                       <svg viewBox="0 0 100 100" onclick="handleDartboardClick(event)" class="w-full h-full cursor-crosshair">
-                          <rect width="100" height="100" fill="#1e293b" /> 
-                          <circle cx="50" cy="50" r="48" fill="#020617" />
+                       <svg viewBox="0 0 100 100" onclick="handleDartboardClick(event)" ontouchstart="handleDartboardClick(event)" class="w-full h-full cursor-crosshair touch-none">
+                          <rect width="100" height="100" fill="#111827" /> 
+                          <circle cx="50" cy="50" r="48" fill="#171717" />
                           ${wedgeAngles.map((num, i) => `
                              <g transform="rotate(${i*18 - 9} 50 50)">
-                                <path d="${getWedgePath(40)}" fill="${i%2 === 0 ? '#ef4444' : '#10b981'}" />
-                                <path d="${getWedgePath(38)}" fill="${i%2 === 0 ? '#0f172a' : '#fef08a'}" />
-                                <path d="${getWedgePath(26)}" fill="${i%2 === 0 ? '#ef4444' : '#10b981'}" />
-                                <path d="${getWedgePath(24)}" fill="${i%2 === 0 ? '#0f172a' : '#fef08a'}" />
+                                <path d="${getWedgePath(40)}" fill="${i%2 === 0 ? '#e11d48' : '#10b981'}" />
+                                <path d="${getWedgePath(38)}" fill="${i%2 === 0 ? '#171717' : '#fdf5e6'}" />
+                                <path d="${getWedgePath(26)}" fill="${i%2 === 0 ? '#e11d48' : '#10b981'}" />
+                                <path d="${getWedgePath(24)}" fill="${i%2 === 0 ? '#171717' : '#fdf5e6'}" />
                              </g>
                           `).join('')}
                           <circle cx="50" cy="50" r="7" fill="#10b981" />
-                          <circle cx="50" cy="50" r="3.5" fill="#ef4444" />
+                          <circle cx="50" cy="50" r="3.5" fill="#e11d48" />
                           ${wedgeAngles.map((num, i) => {
                              const a = (i * 18 - 90) * Math.PI / 180;
                              const x = 50 + 44 * Math.cos(a);
@@ -1107,8 +1134,8 @@
 
                     <div class="grid grid-cols-4 gap-2 lg:gap-3 mb-4 lg:mb-6">
                       <button onclick="handleAddDart(0, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-slate-900 flex items-center justify-center active:bg-slate-700 py-3.5 lg:py-5 rounded-2xl font-black text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95 text-slate-400 border border-slate-700">Miss</button>
-                      <button onclick="handleAddDart(25, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-emerald-900/40 flex items-center justify-center border border-emerald-700/50 active:bg-emerald-800 text-emerald-300 py-3.5 lg:py-5 rounded-2xl font-black text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95">25</button>
-                      <button onclick="handleAddDart(25, 2)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-rose-900/40 flex items-center justify-center border border-rose-700/50 active:bg-rose-800 text-rose-300 py-3.5 lg:py-5 rounded-2xl font-black text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95">50</button>
+                      <button onclick="handleAddDart(25, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-emerald-900/40 flex items-center justify-center border border-emerald-700/50 active:bg-emerald-800 text-emerald-300 py-3.5 lg:py-5 rounded-2xl font-black text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95">Bull</button>
+                      <button onclick="handleAddDart(25, 2)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-rose-900/40 flex items-center justify-center border border-rose-700/50 active:bg-rose-800 text-rose-300 py-3.5 lg:py-5 rounded-2xl font-black text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95">D-Bull</button>
                       <button onclick="handleUndoDart()" ${state.currentDarts.length === 0 ? 'disabled' : ''} class="bg-slate-700 flex items-center justify-center active:bg-slate-600 text-slate-300 py-3.5 lg:py-5 rounded-2xl font-black text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95">⌫ Undo</button>
                     </div>
 
