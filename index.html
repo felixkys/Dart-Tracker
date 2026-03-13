@@ -347,16 +347,19 @@
             const { bullOff, activeGame } = state;
             if (bullOff.winner !== null || bullOff.isTie || !activeGame) return;
             
-            const clientX = event.clientX;
-            const clientY = event.clientY;
+            let clientX = event.clientX;
+            let clientY = event.clientY;
             
+            if (event.changedTouches && event.changedTouches.length > 0) {
+                clientX = event.changedTouches[0].clientX;
+                clientY = event.changedTouches[0].clientY;
+            }
             if (clientX === undefined || clientY === undefined) return;
 
             const rect = event.currentTarget.getBoundingClientRect();
             const xPct = ((clientX - rect.left) / rect.width) * 100;
             const yPct = ((clientY - rect.top) / rect.height) * 100;
             const distance = Math.sqrt(Math.pow(xPct - 50, 2) + Math.pow(yPct - 50, 2));
-
             const isWall = distance > 48;
 
             const currentThrowerIdx = bullOff.order[bullOff.currentTurn];
@@ -384,15 +387,56 @@
         // --- In-Game ---
         window.handleAddDart = (base, fixedMultiplier) => {
             if (state.currentDarts.length >= 3) return;
+
             const mult = fixedMultiplier || state.inputMultiplier;
-            setState({ currentDarts: [...state.currentDarts, { base, multiplier: mult }], inputMultiplier: 1 });
+            const newDart = { base, multiplier: mult };
+
+            state.currentDarts.push(newDart);
+            state.inputMultiplier = 1;
+
+            const activeGame = state.activeGame;
+            const currentPlayer = activeGame.players[activeGame.currentPlayerIndex];
+            
+            let tempScore = currentPlayer.score;
+            let isBust = false;
+            let isWin = false;
+
+            for (let i = 0; i < state.currentDarts.length; i++) {
+                const d = state.currentDarts[i];
+                tempScore -= (d.base * d.multiplier);
+
+                if (tempScore < 0 || (tempScore === 1 && state.outMode === 'Double') || (tempScore === 0 && state.outMode === 'Double' && d.multiplier !== 2)) {
+                    isBust = true; 
+                    break;
+                }
+                if (tempScore === 0) { 
+                    isWin = true; 
+                    break; 
+                }
+            }
+
+            if (isBust || isWin || state.currentDarts.length === 3) {
+                setState({ currentDarts: state.currentDarts }); 
+                
+                if (isBust || isWin) {
+                    processTurn();
+                } else {
+                    // Kurze Verzögerung bei regulärem Ende (3 Darts), um den letzten Wurf kurz zu sehen
+                    setTimeout(() => {
+                        processTurn();
+                    }, 600);
+                }
+            } else {
+                setState({ currentDarts: state.currentDarts });
+            }
         };
 
         window.handleUndoDart = () => {
             setState({ currentDarts: state.currentDarts.slice(0, -1) });
         };
 
-        window.submitTurn = () => {
+        // Funktion wurde vom Fenster-Objekt gelöst, da sie nun vollautomatisch arbeitet
+        const processTurn = () => {
             if (!state.activeGame || state.currentDarts.length === 0) return;
 
             const activeGame = state.activeGame;
@@ -432,16 +476,20 @@
 
             if (isBust) {
                 playerToUpdate.stats.totalDarts += 3;
-                playerToUpdate.stats.first9Darts += Math.max(0, Math.min(3, 9 - legDartsBeforeTurn));
+                const first9DartsInTurn = Math.max(0, Math.min(3, 9 - legDartsBeforeTurn));
+                playerToUpdate.stats.first9Darts += first9DartsInTurn;
+                
                 const paddedDarts = [...appliedDarts];
                 while (paddedDarts.length < 3) paddedDarts.push({ base: 0, multiplier: 1 });
                 playerToUpdate.history.push(paddedDarts);
+                
                 newTurnNotification = { type: 'BUST', playerName: playerToUpdate.name };
                 playSound('BUST');
             } else {
                 playerToUpdate.stats.totalDarts += validDartsThrown;
                 playerToUpdate.score = tempScore;
                 playerToUpdate.stats.totalScore += roundTotal;
+                
                 for (let i = 0; i < validDartsThrown; i++) {
                     if (legDartsBeforeTurn + i < 9) {
                         playerToUpdate.stats.first9Score += (appliedDarts[i].base * appliedDarts[i].multiplier);
@@ -449,7 +497,8 @@
                     }
                 }
                 playerToUpdate.history.push(appliedDarts);
-                if (roundTotal === 180) { newTurnNotification = { type: '180', playerName: playerToUpdate.name }; playSound('180'); }
+                
+                if (roundTotal === 180 && validDartsThrown === 3) { newTurnNotification = { type: '180', playerName: playerToUpdate.name }; playSound('180'); }
             }
 
             const updatedPlayers = [...activeGame.players];
@@ -547,7 +596,6 @@
             
             root.innerHTML = html;
 
-            // Fokus-Wiederherstellung für flüssiges Tippen
             if(state.view === 'SETUP') {
                 const el = document.getElementById('newPlayerInput');
                 if(el) { 
@@ -562,7 +610,6 @@
             <div class="${appContainerClasses} p-4 md:p-8">
               <div class="max-w-5xl mx-auto w-full glass-panel p-6 md:p-10 rounded-3xl shadow-2xl shadow-indigo-900/10 mt-2 md:mt-10 grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16">
                 
-                <!-- Linke Spalte: Einstellungen -->
                 <div class="space-y-6">
                   <h1 class="text-4xl md:text-5xl font-black mb-8 neon-text tracking-tight text-center lg:text-left">Dart Tracker</h1>
                   
@@ -637,7 +684,6 @@
                   </div>
                 </div>
 
-                <!-- Rechte Spalte: Spieler & Start -->
                 <div class="flex flex-col border-t lg:border-t-0 lg:border-l border-slate-800 pt-6 lg:pt-0 lg:pl-12">
                   <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 ml-1 flex justify-between">
                     <span>Kader</span> <span class="bg-indigo-500/20 text-indigo-300 px-3 py-0.5 rounded-full">${state.players.length} Spieler</span>
@@ -1129,16 +1175,12 @@
                       `).join('')}
                     </div>
 
-                    <div class="grid grid-cols-4 gap-2 lg:gap-3 mb-4 lg:mb-6">
+                    <div class="grid grid-cols-4 gap-2 lg:gap-3">
                       <button onclick="handleAddDart(0, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-slate-900 flex items-center justify-center active:bg-slate-700 py-3.5 lg:py-5 rounded-2xl font-black text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95 text-slate-400 border border-slate-700">Miss</button>
                       <button onclick="handleAddDart(25, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-emerald-900/40 flex items-center justify-center border border-emerald-700/50 active:bg-emerald-800 text-emerald-300 py-3.5 lg:py-5 rounded-2xl font-black text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95">Bull</button>
                       <button onclick="handleAddDart(25, 2)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-rose-900/40 flex items-center justify-center border border-rose-700/50 active:bg-rose-800 text-rose-300 py-3.5 lg:py-5 rounded-2xl font-black text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95">D-Bull</button>
                       <button onclick="handleUndoDart()" ${state.currentDarts.length === 0 ? 'disabled' : ''} class="bg-slate-700 flex items-center justify-center active:bg-slate-600 text-slate-300 py-3.5 lg:py-5 rounded-2xl font-black text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95">⌫ Undo</button>
                     </div>
-
-                    <button onclick="submitTurn()" ${state.currentDarts.length === 0 ? 'disabled' : ''} class="w-full flex items-center justify-center bg-indigo-600 disabled:bg-slate-800 disabled:text-slate-600 py-5 lg:py-6 rounded-2xl font-black text-xl lg:text-2xl transition-all active:scale-[0.98] shadow-xl shadow-indigo-600/20 text-white tracking-wide border-b-4 border-indigo-800 disabled:border-none">
-                      Bestätigen
-                    </button>
                   </div>
                 </div>
               </div>
