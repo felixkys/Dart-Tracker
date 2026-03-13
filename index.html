@@ -142,8 +142,8 @@
 
         const formatDart = (d) => {
             if (d.base === 0) return 'Miss';
-            if (d.base === 25 && d.multiplier === 1) return 'Bull';
-            if (d.base === 25 && d.multiplier === 2) return 'D-Bull';
+            if (d.base === 25 && d.multiplier === 1) return '25';
+            if (d.base === 25 && d.multiplier === 2) return '50';
             if (d.multiplier === 1) return `${d.base}`;
             if (d.multiplier === 2) return `D${d.base}`;
             if (d.multiplier === 3) return `T${d.base}`;
