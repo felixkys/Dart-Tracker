@@ -6,10 +6,12 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
-    <meta name="theme-color" content="#0f172a">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#020617">
+    <link rel="icon" href="data:;base64,iVBORw0KGgo="> <!-- Verhindert den Favicon 404 Error -->
     
     <!-- Web App Manifest (Inline via Data-URI) für Android Standalone-Modus -->
-    <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Dart%20Tracker%22%2C%22short_name%22%3A%22Dart%22%2C%22display%22%3A%22standalone%22%2C%22start_url%22%3A%22.%22%2C%22background_color%22%3A%22%23020617%22%2C%22theme_color%22%3A%22%230f172a%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%3Bcharset%3Dutf8%2C%253Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%253E%253Ccircle%20cx%3D%2750%27%20cy%3D%2750%27%20r%3D%2750%27%20fill%3D%27%25230f172a%27%2F%253E%253Ccircle%20cx%3D%2750%27%20cy%3D%2750%27%20r%3D%2710%27%20fill%3D%27%2523ef4444%27%2F%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D">
+    <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Dart%20Tracker%22%2C%22short_name%22%3A%22Dart%22%2C%22display%22%3A%22standalone%22%2C%22start_url%22%3A%22.%22%2C%22background_color%22%3A%22%23020617%22%2C%22theme_color%22%3A%22%23020617%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%3Bcharset%3Dutf8%2C%253Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%253E%253Ccircle%20cx%3D%2750%27%20cy%3D%2750%27%20r%3D%2750%27%20fill%3D%27%25230f172a%27%2F%253E%253Ccircle%20cx%3D%2750%27%20cy%3D%2750%27%20r%3D%2710%27%20fill%3D%27%2523ef4444%27%2F%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D">
     
     <title>Dart Tracker</title>
     
@@ -29,7 +31,7 @@
     </script>
     <style>
         :root { --font-sans: 'Outfit', ui-sans-serif, system-ui, sans-serif; }
-        body { background-color: #0f172a; font-family: var(--font-sans); margin: 0; }
+        html, body { background-color: #020617; font-family: var(--font-sans); margin: 0; }
         .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.05); }
         .neon-text { background: linear-gradient(to right, #60a5fa, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -109,7 +111,6 @@
             }
         };
 
-        // State Updater Funktion
         function setState(updates) {
             state = { ...state, ...updates };
             
@@ -429,7 +430,6 @@
                 if (isBust || isWin) {
                     processTurn();
                 } else {
-                    // Kurze Verzögerung bei regulärem Ende (3 Darts), um den letzten Wurf kurz zu sehen
                     setTimeout(() => {
                         processTurn();
                     }, 600);
@@ -443,7 +443,6 @@
             setState({ currentDarts: state.currentDarts.slice(0, -1) });
         };
 
-        // Funktion wurde vom Fenster-Objekt gelöst, da sie nun vollautomatisch arbeitet
         const processTurn = () => {
             if (!state.activeGame || state.currentDarts.length === 0) return;
 
@@ -885,20 +884,20 @@
                 html += `
                 <div class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/95 backdrop-blur-xl cursor-pointer p-4" onclick="startWithPlayer(${state.bullOff.winner})">
                    <div class="text-center animate-bounce px-4">
-                      <p class="text-emerald-400 font-bold tracking-widest uppercase mb-4 text-sm">Ausbullen Gewonnen</p>
-                      <h2 class="text-5xl md:text-7xl font-black text-white mb-2">${state.activeGame.players[state.bullOff.winner].name}</h2>
-                      <p class="text-xl text-slate-400 font-semibold">Wirft zuerst!</p>
+                      <p class="text-emerald-400 font-bold tracking-widest uppercase mb-4 text-xs sm:text-sm">Ausbullen Gewonnen</p>
+                      <h2 class="text-5xl sm:text-6xl md:text-7xl font-black text-white mb-2">${state.activeGame.players[state.bullOff.winner].name}</h2>
+                      <p class="text-lg sm:text-xl text-slate-400 font-semibold">Wirft zuerst!</p>
                    </div>
-                   <p class="mt-16 text-xs font-bold uppercase tracking-widest bg-white text-slate-900 px-8 py-4 rounded-full shadow-xl shadow-white/10 active:scale-95 transition-transform">
+                   <p class="mt-12 sm:mt-16 text-[10px] sm:text-xs font-bold uppercase tracking-widest bg-white text-slate-900 px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-xl shadow-white/10 active:scale-95 transition-transform">
                       Tap für Match-Start
                    </p>
                 </div>`;
             }
 
             html += `
-              <div class="glass-panel p-8 rounded-3xl shadow-2xl w-full max-w-md mx-auto text-center border border-slate-800 relative overflow-hidden">
+              <div class="glass-panel p-6 sm:p-8 rounded-3xl shadow-2xl w-full max-w-md mx-auto text-center border border-slate-800 relative overflow-hidden">
                 <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-500"></div>
-                <h2 class="text-2xl font-black mb-8 text-white tracking-tight">Wer beginnt?</h2>`;
+                <h2 class="text-xl sm:text-2xl font-black mb-6 sm:mb-8 text-white tracking-tight">Wer beginnt?</h2>`;
                 
             if (state.starterMode === 'SELECT') {
                 html += `
@@ -954,11 +953,11 @@
                           <p class="text-xl font-black text-yellow-500">Unentschieden!</p>
                         </div>`;
                 } else {
-                    html += `<div class="mb-6 opacity-0 h-[76px]"></div>`;
+                    html += `<div class="mb-4 sm:mb-6 opacity-0 h-[60px] sm:h-[76px]"></div>`;
                 }
 
                 html += `
-                    <div class="relative w-full aspect-square max-w-[280px] shadow-2xl rounded-full overflow-hidden border-[10px] border-slate-950 bg-slate-800">
+                    <div class="relative w-full aspect-square max-w-[240px] sm:max-w-[280px] shadow-2xl rounded-full overflow-hidden border-[8px] sm:border-[10px] border-slate-950 bg-slate-800">
                        <svg viewBox="0 0 100 100" onpointerdown="handleDartboardClick(event)" class="w-full h-full cursor-crosshair touch-none">
                           <rect width="100" height="100" fill="#000000" /> 
                           <circle cx="50" cy="50" r="48" fill="#000000" />
@@ -1061,56 +1060,56 @@
             const projectedScore = activePlayer.score - roundTotal;
             const checkoutRoute = getCheckoutSuggestion(projectedScore, state.outMode);
 
-            let html = `<div class="${appContainerClasses} flex flex-col p-2 md:p-4 lg:p-8">`;
+            let html = `<div class="${appContainerClasses} flex flex-col p-2 sm:p-4 lg:p-8">`;
 
             if (state.turnNotification) {
                 html += `
                 <div class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-md cursor-pointer px-4" onclick="setTurnNotification(null)">
                   <div class="text-center animate-bounce">
-                    ${state.turnNotification.type === '180' ? `<h2 class="text-8xl md:text-9xl font-black text-rose-500 mb-4 drop-shadow-[0_0_30px_rgba(244,63,94,0.6)] tracking-tighter">180!</h2><p class="text-2xl text-white font-bold">${state.turnNotification.playerName}</p>` : ''}
-                    ${state.turnNotification.type === 'BUST' ? `<h2 class="text-5xl md:text-8xl font-black text-slate-500 mb-4 tracking-tighter">NO SCORE</h2><p class="text-xl text-slate-300 font-bold">Überworfen von ${state.turnNotification.playerName}</p>` : ''}
-                    ${state.turnNotification.type === 'LEG_WON' ? `<h2 class="text-5xl md:text-8xl font-black text-emerald-400 mb-4 drop-shadow-[0_0_20px_rgba(52,211,153,0.4)] tracking-tighter">GAME SHOT</h2><p class="text-xl text-white font-bold">${state.turnNotification.playerName} holt das Leg!</p>` : ''}
-                    ${state.turnNotification.type === 'SET_WON' ? `<h2 class="text-5xl md:text-8xl font-black text-blue-400 mb-4 drop-shadow-[0_0_20px_rgba(96,165,250,0.4)] tracking-tighter">SET SHOT</h2><p class="text-xl text-white font-bold">${state.turnNotification.playerName} gewinnt das Set!</p>` : ''}
+                    ${state.turnNotification.type === '180' ? `<h2 class="text-7xl sm:text-8xl md:text-9xl font-black text-rose-500 mb-2 sm:mb-4 drop-shadow-[0_0_30px_rgba(244,63,94,0.6)] tracking-tighter">180!</h2><p class="text-xl sm:text-2xl text-white font-bold">${state.turnNotification.playerName}</p>` : ''}
+                    ${state.turnNotification.type === 'BUST' ? `<h2 class="text-5xl sm:text-6xl md:text-8xl font-black text-slate-500 mb-2 sm:mb-4 tracking-tighter">NO SCORE</h2><p class="text-lg sm:text-xl text-slate-300 font-bold">Überworfen von ${state.turnNotification.playerName}</p>` : ''}
+                    ${state.turnNotification.type === 'LEG_WON' ? `<h2 class="text-5xl sm:text-6xl md:text-8xl font-black text-emerald-400 mb-2 sm:mb-4 drop-shadow-[0_0_20px_rgba(52,211,153,0.4)] tracking-tighter">GAME SHOT</h2><p class="text-lg sm:text-xl text-white font-bold">${state.turnNotification.playerName} holt das Leg!</p>` : ''}
+                    ${state.turnNotification.type === 'SET_WON' ? `<h2 class="text-5xl sm:text-6xl md:text-8xl font-black text-blue-400 mb-2 sm:mb-4 drop-shadow-[0_0_20px_rgba(96,165,250,0.4)] tracking-tighter">SET SHOT</h2><p class="text-lg sm:text-xl text-white font-bold">${state.turnNotification.playerName} gewinnt das Set!</p>` : ''}
                   </div>
-                  <p class="absolute bottom-12 text-slate-400 text-xs font-bold uppercase tracking-widest bg-slate-800/50 px-6 py-3 rounded-full border border-slate-700/50">Tippen zum Fortfahren</p>
+                  <p class="absolute bottom-8 sm:bottom-12 text-slate-400 text-[10px] sm:text-xs font-bold uppercase tracking-widest bg-slate-800/50 px-5 sm:px-6 py-2 sm:py-3 rounded-full border border-slate-700/50">Tippen zum Fortfahren</p>
                 </div>`;
             }
 
             html += `
-              <div class="max-w-6xl mx-auto w-full flex-1 flex flex-col lg:flex-row gap-4 lg:gap-12 justify-between h-full">
+              <div class="max-w-6xl mx-auto w-full flex-1 flex flex-col lg:flex-row gap-3 lg:gap-12 justify-between h-full">
                 
                 <!-- Linke Spalte (PC) / Oben (Mobile): Header & Scores -->
                 <div class="flex-1 flex flex-col justify-start lg:justify-center w-full lg:max-w-2xl">
-                  <div class="flex justify-between items-center mb-3 px-2">
+                  <div class="flex justify-between items-center mb-2 sm:mb-3 px-1 sm:px-2">
                      <div class="flex flex-col">
-                       <span class="text-sm md:text-base font-black text-slate-300 tracking-tight">${state.gameMode} • ${state.outMode}</span>
-                       <span class="text-[10px] md:text-xs text-indigo-400 font-bold uppercase tracking-widest">
+                       <span class="text-xs sm:text-sm md:text-base font-black text-slate-300 tracking-tight">${state.gameMode} • ${state.outMode}</span>
+                       <span class="text-[9px] sm:text-[10px] md:text-xs text-indigo-400 font-bold uppercase tracking-widest">
                          ${state.activeGame.matchFormat === 'SETS' ? `Best of ${state.activeGame.targetSets} Sets` : `First to ${state.activeGame.targetLegs} Legs`}
                        </span>
                      </div>
-                     <button onclick="setView('MATCH_STATS')" class="text-xs md:text-sm bg-slate-800/80 text-slate-300 border border-slate-700 px-3 md:px-4 py-1.5 md:py-2 rounded-lg active:scale-95 transition-all font-bold flex items-center justify-center">Abbrechen</button>
+                     <button onclick="setView('MATCH_STATS')" class="text-[10px] sm:text-xs md:text-sm bg-slate-800/80 text-slate-300 border border-slate-700 px-3 md:px-4 py-1.5 md:py-2 rounded-lg active:scale-95 transition-all font-bold flex items-center justify-center">Abbrechen</button>
                   </div>
 
-                  <div class="flex gap-3 mb-4 overflow-x-auto pb-2 no-scrollbar snap-x">
+                  <div class="flex gap-2 sm:gap-3 mb-2 sm:mb-4 overflow-x-auto pb-2 no-scrollbar snap-x">
                     ${state.activeGame.players.map((p, idx) => {
                       const isActive = idx === state.activeGame.currentPlayerIndex;
                       const isStarter = idx === state.activeGame.startingPlayerIndex;
                       return `
-                        <div class="snap-center flex-1 min-w-[130px] p-4 lg:p-6 rounded-3xl border-2 transition-all relative ${isActive ? 'bg-indigo-600/10 border-indigo-500 shadow-[0_0_25px_rgba(99,102,241,0.15)] scale-100' : 'bg-slate-900/50 border-slate-800 scale-95 opacity-80'}">
-                          ${isStarter ? `<div class="absolute top-3 md:top-4 right-3 md:right-4 w-2 h-2 md:w-3 md:h-3 bg-yellow-400 rounded-full shadow-[0_0_8px_rgba(250,204,21,0.8)]" title="Begonnenes Leg"></div>` : ''}
-                          <h3 class="text-xs md:text-base mb-2 lg:mb-4 truncate font-bold uppercase tracking-wide ${isActive ? 'text-indigo-300' : 'text-slate-400'}">${p.name}</h3>
-                          <div class="flex gap-3 text-[10px] md:text-xs font-black text-slate-500 mb-1 lg:mb-2 tracking-widest">
+                        <div class="snap-center flex-1 min-w-[110px] sm:min-w-[130px] p-3 sm:p-4 lg:p-6 rounded-2xl sm:rounded-3xl border-2 transition-all relative ${isActive ? 'bg-indigo-600/10 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.15)] scale-100' : 'bg-slate-900/50 border-slate-800 scale-95 opacity-80'}">
+                          ${isStarter ? `<div class="absolute top-2 sm:top-3 md:top-4 right-2 sm:right-3 md:right-4 w-1.5 h-1.5 sm:w-2 sm:h-2 md:w-3 md:h-3 bg-yellow-400 rounded-full shadow-[0_0_8px_rgba(250,204,21,0.8)]" title="Begonnenes Leg"></div>` : ''}
+                          <h3 class="text-[10px] sm:text-xs md:text-base mb-1.5 sm:mb-2 lg:mb-4 truncate font-bold uppercase tracking-wide ${isActive ? 'text-indigo-300' : 'text-slate-400'}">${p.name}</h3>
+                          <div class="flex gap-2 sm:gap-3 text-[9px] sm:text-[10px] md:text-xs font-black text-slate-500 mb-1 lg:mb-2 tracking-widest">
                             ${state.activeGame.matchFormat === 'SETS' ? `<span>S: <span class="text-slate-200">${p.setsWon}</span></span>` : ''}
                             <span>L: <span class="text-slate-200">${p.legsWon}</span></span>
                           </div>
-                          <p class="text-6xl md:text-8xl lg:text-9xl font-black leading-none tracking-tighter ${isActive ? 'text-white' : 'text-slate-300'}">${p.score}</p>
+                          <p class="text-5xl sm:text-6xl md:text-8xl lg:text-9xl font-black leading-none tracking-tighter ${isActive ? 'text-white' : 'text-slate-300'}">${p.score}</p>
                         </div>`;
                     }).join('')}
                   </div>
 
-                  <div class="glass-panel p-3 lg:p-5 rounded-2xl mb-2">
-                    <div class="grid gap-y-2 items-center" style="grid-template-columns: auto repeat(${state.activeGame.players.length}, 1fr)">
-                      <div class="text-slate-500 text-[9px] md:text-xs font-bold uppercase tracking-widest pl-1 lg:py-1">3-Dart Avg</div>
+                  <div class="glass-panel p-2 sm:p-3 lg:p-5 rounded-xl sm:rounded-2xl mb-2 sm:mb-0">
+                    <div class="grid gap-y-1.5 sm:gap-y-2 items-center" style="grid-template-columns: auto repeat(${state.activeGame.players.length}, 1fr)">
+                      <div class="text-slate-500 text-[8px] sm:text-[9px] md:text-xs font-bold uppercase tracking-widest pl-1 lg:py-1">3-Dart Avg</div>
                       ${state.activeGame.players.map(p => `
                         <div class="text-center font-black text-[11px] md:text-sm lg:text-base text-slate-200">
                           ${p.stats.totalDarts > 0 ? ((p.stats.totalScore / p.stats.totalDarts) * 3).toFixed(1) : '0.0'}
@@ -1145,49 +1144,49 @@
                 </div>
 
                 <!-- Rechte Spalte (PC) / Unten (Mobile): Input -->
-                <div class="w-full lg:w-[450px] flex flex-col justify-end lg:justify-center mt-auto lg:mt-0 shrink-0">
-                  <div class="bg-slate-800 p-3 lg:p-4 rounded-t-3xl border-t border-x border-slate-700 flex justify-between items-center min-h-[70px] lg:min-h-[85px]">
-                     <div class="flex items-center gap-2">
+                <div class="w-full lg:w-[450px] flex flex-col justify-end lg:justify-center mt-auto shrink-0 mb-1 sm:mb-0">
+                  <div class="bg-slate-800 p-2 sm:p-3 lg:p-4 rounded-t-2xl sm:rounded-t-3xl border-t border-x border-slate-700 flex justify-between items-center min-h-[56px] sm:min-h-[70px] lg:min-h-[85px]">
+                     <div class="flex items-center gap-1.5 sm:gap-2">
                         ${[0, 1, 2].map(idx => {
                           const dart = state.currentDarts[idx];
                           return `
-                            <div class="w-12 h-12 lg:w-14 lg:h-14 rounded-2xl flex items-center justify-center text-sm md:text-base lg:text-lg font-black transition-all ${dart ? 'bg-indigo-600 border-none text-white shadow-lg shadow-indigo-600/30' : 'bg-slate-900 border border-slate-700 text-slate-600'}">
+                            <div class="w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center text-xs sm:text-sm md:text-base lg:text-lg font-black transition-all ${dart ? 'bg-indigo-600 border-none text-white shadow-lg shadow-indigo-600/30' : 'bg-slate-900 border border-slate-700 text-slate-600'}">
                               ${dart ? formatDart(dart) : '-'}
                             </div>
                           `;
                         }).join('')}
-                        <div class="ml-3 text-center">
-                          <span class="block text-[9px] lg:text-[10px] text-slate-400 uppercase font-black tracking-widest">Sum</span>
-                          <span class="font-black text-2xl lg:text-3xl text-white leading-none tracking-tighter">${roundTotal}</span>
+                        <div class="ml-2 sm:ml-3 text-center">
+                          <span class="block text-[8px] sm:text-[9px] lg:text-[10px] text-slate-400 uppercase font-black tracking-widest">Sum</span>
+                          <span class="font-black text-xl sm:text-2xl lg:text-3xl text-white leading-none tracking-tighter">${roundTotal}</span>
                         </div>
                      </div>
 
                      ${checkoutRoute ? `
-                       <div class="text-right bg-emerald-500/10 px-4 py-2 rounded-2xl border border-emerald-500/20">
-                         <span class="block text-emerald-400 text-[9px] font-black uppercase tracking-widest mb-0.5">Weg</span>
-                         <span class="text-white font-black text-sm md:text-base lg:text-lg tracking-tight">${checkoutRoute}</span>
+                       <div class="text-right bg-emerald-500/10 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl border border-emerald-500/20">
+                         <span class="block text-emerald-400 text-[8px] sm:text-[9px] font-black uppercase tracking-widest mb-0.5">Weg</span>
+                         <span class="text-white font-black text-xs sm:text-sm md:text-base lg:text-lg tracking-tight">${checkoutRoute}</span>
                        </div>
                      ` : ''}
                   </div>
 
-                  <div class="bg-slate-800 p-3 lg:p-5 rounded-b-3xl border border-slate-700 shadow-2xl mt-[1px]">
-                    <div class="flex gap-2 lg:gap-3 mb-3 lg:mb-4">
-                      <button onclick="setInputMultiplier(1)" class="flex-1 py-3.5 lg:py-5 flex items-center justify-center rounded-2xl font-black text-sm lg:text-base transition-all active:scale-95 ${state.inputMultiplier === 1 ? 'bg-slate-200 text-slate-900 shadow-lg' : 'bg-slate-900 text-slate-400 hover:bg-slate-700'}">Single</button>
-                      <button onclick="setInputMultiplier(2)" class="flex-1 py-3.5 lg:py-5 flex items-center justify-center rounded-2xl font-black text-sm lg:text-base transition-all active:scale-95 ${state.inputMultiplier === 2 ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' : 'bg-slate-900 text-slate-400 hover:bg-slate-700'}">Double</button>
-                      <button onclick="setInputMultiplier(3)" class="flex-1 py-3.5 lg:py-5 flex items-center justify-center rounded-2xl font-black text-sm lg:text-base transition-all active:scale-95 ${state.inputMultiplier === 3 ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30' : 'bg-slate-900 text-slate-400 hover:bg-slate-700'}">Treble</button>
+                  <div class="bg-slate-800 p-2 sm:p-3 lg:p-5 rounded-b-2xl sm:rounded-b-3xl border border-slate-700 shadow-2xl mt-[1px]">
+                    <div class="flex gap-1.5 sm:gap-2 lg:gap-3 mb-2 sm:mb-3 lg:mb-4">
+                      <button onclick="setInputMultiplier(1)" class="flex-1 py-3 sm:py-3.5 lg:py-5 flex items-center justify-center rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm lg:text-base transition-all active:scale-95 ${state.inputMultiplier === 1 ? 'bg-slate-200 text-slate-900 shadow-lg' : 'bg-slate-900 text-slate-400 hover:bg-slate-700'}">Single</button>
+                      <button onclick="setInputMultiplier(2)" class="flex-1 py-3 sm:py-3.5 lg:py-5 flex items-center justify-center rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm lg:text-base transition-all active:scale-95 ${state.inputMultiplier === 2 ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' : 'bg-slate-900 text-slate-400 hover:bg-slate-700'}">Double</button>
+                      <button onclick="setInputMultiplier(3)" class="flex-1 py-3 sm:py-3.5 lg:py-5 flex items-center justify-center rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm lg:text-base transition-all active:scale-95 ${state.inputMultiplier === 3 ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30' : 'bg-slate-900 text-slate-400 hover:bg-slate-700'}">Treble</button>
                     </div>
 
-                    <div class="grid grid-cols-5 gap-2 lg:gap-3 mb-3 lg:mb-4">
+                    <div class="grid grid-cols-5 gap-1.5 sm:gap-2 lg:gap-3 mb-2 sm:mb-3 lg:mb-4">
                       ${Array.from({length: 20}, (_, i) => i + 1).map(num => `
-                        <button onclick="handleAddDart(${num})" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-slate-700 flex items-center justify-center active:bg-indigo-500 disabled:opacity-50 py-3 md:py-4 lg:py-5 rounded-2xl font-black text-xl lg:text-2xl transition-all active:scale-90 shadow-sm border-b-2 border-slate-900 text-slate-100">${num}</button>
+                        <button onclick="handleAddDart(${num})" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-slate-700 flex items-center justify-center active:bg-indigo-500 disabled:opacity-50 py-3 sm:py-3 md:py-4 lg:py-5 rounded-xl sm:rounded-2xl font-black text-lg sm:text-xl lg:text-2xl transition-all active:scale-90 shadow-sm border-b-2 border-slate-900 text-slate-100">${num}</button>
                       `).join('')}
                     </div>
 
-                    <div class="grid grid-cols-4 gap-2 lg:gap-3">
-                      <button onclick="handleAddDart(0, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-slate-900 flex items-center justify-center active:bg-slate-700 py-3.5 lg:py-5 rounded-2xl font-black text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95 text-slate-400 border border-slate-700">Miss</button>
-                      <button onclick="handleAddDart(25, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-emerald-900/40 flex items-center justify-center border border-emerald-700/50 active:bg-emerald-800 text-emerald-300 py-3.5 lg:py-5 rounded-2xl font-black text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95">Bull</button>
-                      <button onclick="handleAddDart(25, 2)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-rose-900/40 flex items-center justify-center border border-rose-700/50 active:bg-rose-800 text-rose-300 py-3.5 lg:py-5 rounded-2xl font-black text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95">D-Bull</button>
-                      <button onclick="handleUndoDart()" ${state.currentDarts.length === 0 ? 'disabled' : ''} class="bg-slate-700 flex items-center justify-center active:bg-slate-600 text-slate-300 py-3.5 lg:py-5 rounded-2xl font-black text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95">⌫ Undo</button>
+                    <div class="grid grid-cols-4 gap-1.5 sm:gap-2 lg:gap-3">
+                      <button onclick="handleAddDart(0, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-slate-900 flex items-center justify-center active:bg-slate-700 py-3 sm:py-3.5 lg:py-5 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95 text-slate-400 border border-slate-700">Miss</button>
+                      <button onclick="handleAddDart(25, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-emerald-900/40 flex items-center justify-center border border-emerald-700/50 active:bg-emerald-800 text-emerald-300 py-3 sm:py-3.5 lg:py-5 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95">Bull</button>
+                      <button onclick="handleAddDart(25, 2)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-rose-900/40 flex items-center justify-center border border-rose-700/50 active:bg-rose-800 text-rose-300 py-3 sm:py-3.5 lg:py-5 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95">D-Bull</button>
+                      <button onclick="handleUndoDart()" ${state.currentDarts.length === 0 ? 'disabled' : ''} class="bg-slate-700 flex items-center justify-center active:bg-slate-600 text-slate-300 py-3 sm:py-3.5 lg:py-5 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95">⌫ Undo</button>
                     </div>
                   </div>
                 </div>
