@@ -1105,6 +1105,7 @@
                     ${state.activeGame.players.map((p, idx) => {
                       const isActive = idx === state.activeGame.currentPlayerIndex;
                       const isStarter = idx === state.activeGame.startingPlayerIndex;
+                      const displayScore = isActive ? (p.score - roundTotal) : p.score;
                       return `
                         <div class="snap-center flex-1 min-w-[130px] p-4 sm:p-6 lg:p-8 rounded-3xl transition-all relative border ${isActive ? 'bg-slate-800 border-indigo-500 scale-100' : 'bg-slate-900/50 border-slate-800 scale-[0.98] opacity-60'}">
                           ${isStarter ? `<div class="absolute top-4 right-4 w-2 h-2 bg-yellow-500 rounded-full" title="Started Leg"></div>` : ''}
@@ -1113,7 +1114,7 @@
                             ${state.activeGame.matchFormat === 'SETS' ? `<span>Sets: <span class="text-slate-300">${p.setsWon}</span></span>` : ''}
                             <span>Legs: <span class="text-slate-300">${p.legsWon}</span></span>
                           </div>
-                          <p class="text-6xl sm:text-7xl md:text-8xl font-bold leading-none tracking-tighter ${isActive ? 'text-white' : 'text-slate-400'}">${p.score}</p>
+                          <p class="text-6xl sm:text-7xl md:text-8xl font-bold leading-none tracking-tighter ${isActive ? 'text-white' : 'text-slate-400'}">${displayScore}</p>
                         </div>`;
                     }).join('')}
                   </div>
