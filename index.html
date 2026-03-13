@@ -742,23 +742,19 @@
                       `).join('')}
                     </ul>
                     ${state.errorMsg ? `<div class="mt-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 p-3 rounded-xl text-sm font-bold text-center">${state.errorMsg}</div>` : ''}
+                    <!-- Start button inside panel (desktop only) -->
+                    <button onclick="startApp()" class="hidden lg:flex w-full mt-6 bg-gradient-to-r from-blue-600 to-indigo-600 py-5 rounded-2xl font-black text-xl active:scale-[0.97] shadow-xl shadow-indigo-600/20 items-center justify-center">
+                      ${state.appMode === 'TOURNAMENT' ? '🏆 Turnier starten' : state.appMode === 'LEAGUE' ? '📋 Liga erstellen' : '🎯 Starter bestimmen'}
+                    </button>
                   </div>
                 </div>
               </div>
 
-              <!-- Sticky start button at bottom -->
-              <div class="flex-shrink-0 px-4 pb-4 pt-2 md:hidden" style="padding-bottom: max(1rem, env(safe-area-inset-bottom))">
+              <!-- Mobile: sticky start button pinned to bottom -->
+              <div class="flex-shrink-0 lg:hidden px-4 pt-2" style="padding-bottom: max(1rem, env(safe-area-inset-bottom))">
                 <button onclick="startApp()" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 py-5 rounded-2xl font-black text-xl transition-all active:scale-[0.97] shadow-xl shadow-indigo-600/20 flex items-center justify-center">
                   ${state.appMode === 'TOURNAMENT' ? '🏆 Turnier starten' : state.appMode === 'LEAGUE' ? '📋 Liga erstellen' : '🎯 Starter bestimmen'}
                 </button>
-              </div>
-              <!-- Desktop button inside panel -->
-              <div class="hidden md:block px-8 pb-8 max-w-5xl mx-auto w-full">
-                <div class="lg:pl-[calc(50%+2rem)]">
-                  <button onclick="startApp()" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 py-5 rounded-2xl font-black text-xl active:scale-[0.97] shadow-xl shadow-indigo-600/20 flex items-center justify-center">
-                    ${state.appMode === 'TOURNAMENT' ? '🏆 Turnier starten' : state.appMode === 'LEAGUE' ? '📋 Liga erstellen' : '🎯 Starter bestimmen'}
-                  </button>
-                </div>
               </div>
             </div>`;
         }
@@ -1169,14 +1165,17 @@
                 }).join('')}
               </div>
 
-              <!-- Live Stats strip — compact 2-row grid -->
-              <div class="flex-shrink-0 mx-3 mb-1 bg-slate-900/60 rounded-xl border border-slate-800 px-3 py-2">
-                <div class="grid gap-x-2 text-center" style="grid-template-columns: 80px repeat(${state.activeGame.players.length}, 1fr)">
-                  <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest text-left col-span-1 self-center">Avg</span>
+              <!-- Live Stats strip — 4 rows -->
+              <div class="flex-shrink-0 mx-3 mb-1 bg-slate-900/60 rounded-xl border border-slate-800 px-3 py-1.5">
+                <div class="grid text-center items-center" style="grid-template-columns: 72px repeat(${state.activeGame.players.length}, 1fr); row-gap: 3px">
+                  <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest text-left">Avg</span>
                   ${state.activeGame.players.map(p => `<span class="text-xs font-black text-slate-200">${p.stats.totalDarts > 0 ? ((p.stats.totalScore / p.stats.totalDarts)*3).toFixed(1) : '–'}</span>`).join('')}
-                  
-                  <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest text-left self-center mt-1">Checkout</span>
-                  ${state.activeGame.players.map(p => `<span class="text-xs font-black text-emerald-400 mt-1">${p.stats.checkouts}/${p.stats.checkoutAttempts}</span>`).join('')}
+                  <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest text-left">9-Dart</span>
+                  ${state.activeGame.players.map(p => `<span class="text-xs font-black text-indigo-300">${p.stats.first9Darts > 0 ? ((p.stats.first9Score / p.stats.first9Darts)*3).toFixed(1) : '–'}</span>`).join('')}
+                  <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest text-left">Checkout</span>
+                  ${state.activeGame.players.map(p => `<span class="text-xs font-black text-emerald-400">${p.stats.checkouts}/${p.stats.checkoutAttempts}</span>`).join('')}
+                  <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest text-left">Darts</span>
+                  ${state.activeGame.players.map(p => { const ld = p.history.reduce((s,t)=>s+t.length,0); return `<span class="text-xs font-black text-slate-400">${ld}</span>`; }).join('')}
                 </div>
               </div>
 
