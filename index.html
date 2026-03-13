@@ -8,7 +8,6 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="color-scheme" content="dark">
     
-    <!-- Erzwingt die dunkle Farbe für die Statusleiste/Navigationsleiste, unabhängig vom System-Theme -->
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#020617">
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#020617">
     <meta name="theme-color" content="#020617">
@@ -45,9 +44,6 @@
     <div id="root"></div>
 
     <script>
-        // ==========================================
-        // GLOBAL CONSTANTS & HELPERS
-        // ==========================================
         const DB_NAME = 'DartTrackerDB_HTML';
         const STORE_NAME = 'appState';
         const appContainerClasses = "app-container";
@@ -58,9 +54,6 @@
             totalDarts: 0, totalScore: 0, first9Score: 0, first9Darts: 0, checkoutAttempts: 0, checkouts: 0
         });
 
-        // ==========================================
-        // 1. STATE MANAGEMENT
-        // ==========================================
         let state = {
             isDbLoaded: false,
             view: 'SETUP',
@@ -126,9 +119,6 @@
             render();
         }
 
-        // ==========================================
-        // 2. INITIALIZATION
-        // ==========================================
         async function initApp() {
             const savedState = await dbHelper.load();
             if (savedState) {
@@ -139,9 +129,6 @@
             render();
         }
 
-        // ==========================================
-        // 3. LOGIC & UTILITIES
-        // ==========================================
         const playSound = (type) => {
             try { new Audio(type === '180' ? '/180.mp3' : '/bust.mp3').play().catch(()=>{}); } catch (e) {}
         };
@@ -228,9 +215,6 @@
             return Object.values(standings).sort((a, b) => b.points !== a.points ? b.points - a.points : b.wins - a.wins);
         };
 
-        // ==========================================
-        // 4. EVENTS & ACTIONS
-        // ==========================================
         window.setAppMode = (m) => setState({appMode: m});
         window.setGameMode = (m) => setState({gameMode: m});
         window.setOutMode = (m) => setState({outMode: m});
@@ -343,7 +327,6 @@
             setState({ rounds: newRounds, currentRoundIndex: state.currentRoundIndex + 1 });
         };
 
-        // --- Starter Wizard ---
         window.startWithPlayer = (index) => {
             setState({
                 activeGame: { ...state.activeGame, startingPlayerIndex: index, currentPlayerIndex: index },
@@ -401,7 +384,6 @@
             setState({ bullOff: { ...bullOff, ...updates } });
         };
 
-        // --- In-Game ---
         window.handleAddDart = (base, fixedMultiplier) => {
             if (state.currentDarts.length >= 3) return;
 
@@ -578,9 +560,6 @@
             else window.resetApp();
         };
 
-        // ==========================================
-        // 5. RENDER SYSTEM
-        // ==========================================
         function render() {
             if (!state.isDbLoaded) return;
             const root = document.getElementById('root');
@@ -1072,7 +1051,7 @@
             const projectedScore = activePlayer.score - roundTotal;
             const checkoutRoute = getCheckoutSuggestion(projectedScore, state.outMode);
 
-            let html = `<div class="${appContainerClasses} p-1 sm:p-6 lg:p-10 flex flex-col">`;
+            let html = `<div class="${appContainerClasses} p-2 sm:p-6 lg:p-10 flex flex-col">`;
 
             if (state.turnNotification) {
                 html += `
@@ -1088,17 +1067,17 @@
             }
 
             html += `
-              <div class="max-w-7xl mx-auto w-full flex-1 flex flex-col lg:flex-row gap-2 sm:gap-6 lg:gap-16 lg:items-center justify-between h-full">
+              <div class="max-w-7xl mx-auto w-full flex-1 flex flex-col lg:flex-row gap-3 sm:gap-6 lg:gap-16 lg:items-center justify-between h-full">
                 
                 <div class="flex-1 flex flex-col justify-start lg:justify-center w-full min-w-0">
-                  <div class="flex justify-between items-center mb-1.5 sm:mb-4 px-1 sm:px-2">
+                  <div class="flex justify-between items-center mb-2 sm:mb-4 px-1 sm:px-2">
                      <div class="flex flex-col">
                        <span class="text-xs sm:text-sm md:text-base font-bold text-slate-300 tracking-tight">${state.gameMode} • ${state.outMode === 'Single' ? 'Einfach' : 'Doppel'} Out</span>
                        <span class="text-[9px] md:text-xs text-indigo-400 font-semibold uppercase tracking-widest mt-0.5">
                          ${state.activeGame.matchFormat === 'SETS' ? `Best of ${state.activeGame.targetSets} Sets` : `Wer zuerst ${state.activeGame.targetLegs} Legs gewinnt`}
                        </span>
                      </div>
-                     <button onclick="setView('MATCH_STATS')" class="text-[10px] sm:text-xs md:text-sm bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700 px-2 py-1 sm:px-4 sm:py-2.5 rounded-lg sm:rounded-xl active:scale-95 transition-all font-semibold flex items-center justify-center">Abbrechen</button>
+                     <button onclick="setView('MATCH_STATS')" class="text-[10px] sm:text-xs md:text-sm bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700 px-3 py-1.5 sm:px-4 sm:py-2.5 rounded-lg sm:rounded-xl active:scale-95 transition-all font-semibold flex items-center justify-center">Abbrechen</button>
                   </div>
 
                   <div class="flex gap-2 sm:gap-4 mb-2 sm:mb-4 overflow-x-auto pb-1 sm:pb-2 no-scrollbar snap-x">
@@ -1107,42 +1086,42 @@
                       const isStarter = idx === state.activeGame.startingPlayerIndex;
                       const displayScore = isActive ? (p.score - roundTotal) : p.score;
                       return `
-                        <div class="snap-center flex-1 min-w-[100px] sm:min-w-[130px] p-2 sm:p-6 lg:p-8 rounded-2xl sm:rounded-3xl transition-all relative border ${isActive ? 'bg-slate-800 border-indigo-500 scale-100' : 'bg-slate-900/50 border-slate-800 scale-[0.98] opacity-60'}">
+                        <div class="snap-center flex-1 min-w-[110px] sm:min-w-[130px] p-3 sm:p-6 lg:p-8 rounded-2xl sm:rounded-3xl transition-all relative border ${isActive ? 'bg-slate-800 border-indigo-500 scale-100' : 'bg-slate-900/50 border-slate-800 scale-[0.98] opacity-60'}">
                           ${isStarter ? `<div class="absolute top-2 sm:top-4 right-2 sm:right-4 w-1.5 h-1.5 sm:w-2 sm:h-2 bg-yellow-500 rounded-full" title="Started Leg"></div>` : ''}
-                          <h3 class="text-[10px] sm:text-xs md:text-sm lg:text-base mb-0.5 sm:mb-2 lg:mb-3 truncate font-semibold uppercase tracking-wide ${isActive ? 'text-indigo-400' : 'text-slate-500'}">${p.name}</h3>
-                          <div class="flex gap-1.5 sm:gap-3 text-[9px] sm:text-[10px] md:text-xs font-bold text-slate-500 mb-1 sm:mb-2 lg:mb-4 tracking-widest">
+                          <h3 class="text-xs md:text-sm lg:text-base mb-1 sm:mb-2 lg:mb-3 truncate font-semibold uppercase tracking-wide ${isActive ? 'text-indigo-400' : 'text-slate-500'}">${p.name}</h3>
+                          <div class="flex gap-2 sm:gap-3 text-[10px] md:text-xs font-bold text-slate-500 mb-1 sm:mb-2 lg:mb-4 tracking-widest">
                             ${state.activeGame.matchFormat === 'SETS' ? `<span>S: <span class="text-slate-300">${p.setsWon}</span></span>` : ''}
                             <span>L: <span class="text-slate-300">${p.legsWon}</span></span>
                           </div>
-                          <p class="text-4xl sm:text-7xl md:text-8xl font-bold leading-none tracking-tighter ${isActive ? 'text-white' : 'text-slate-400'}">${displayScore}</p>
+                          <p class="text-6xl sm:text-7xl md:text-8xl font-bold leading-none tracking-tighter ${isActive ? 'text-white' : 'text-slate-400'}">${displayScore}</p>
                         </div>`;
                     }).join('')}
                   </div>
 
                   <div class="bg-slate-900/40 border border-slate-800 p-2 sm:p-5 lg:p-8 rounded-2xl sm:rounded-3xl mb-1 sm:mb-0">
                     <div class="grid gap-y-1 sm:gap-y-3 lg:gap-y-5 items-center" style="grid-template-columns: auto repeat(${state.activeGame.players.length}, 1fr)">
-                      <div class="text-slate-500 text-[8px] sm:text-[10px] md:text-xs font-semibold uppercase tracking-widest pl-1 sm:pl-2">3-Dart Avg</div>
+                      <div class="text-slate-500 text-[9px] sm:text-[10px] md:text-xs font-semibold uppercase tracking-widest pl-1 sm:pl-2">3-Dart Avg</div>
                       ${state.activeGame.players.map(p => `
                         <div class="text-center font-bold text-xs sm:text-sm md:text-base text-slate-300">
                           ${p.stats.totalDarts > 0 ? ((p.stats.totalScore / p.stats.totalDarts) * 3).toFixed(1) : '0.0'}
                         </div>
                       `).join('')}
                       
-                      <div class="text-slate-500 text-[8px] sm:text-[10px] md:text-xs font-semibold uppercase tracking-widest pl-1 sm:pl-2">First 9 Avg</div>
+                      <div class="text-slate-500 text-[9px] sm:text-[10px] md:text-xs font-semibold uppercase tracking-widest pl-1 sm:pl-2">First 9 Avg</div>
                       ${state.activeGame.players.map(p => `
                         <div class="text-center font-bold text-xs sm:text-sm md:text-base text-slate-300">
                           ${p.stats.first9Darts > 0 ? ((p.stats.first9Score / p.stats.first9Darts) * 3).toFixed(1) : '0.0'}
                         </div>
                       `).join('')}
 
-                      <div class="text-slate-500 text-[8px] sm:text-[10px] md:text-xs font-semibold uppercase tracking-widest pl-1 sm:pl-2">Checkout</div>
+                      <div class="text-slate-500 text-[9px] sm:text-[10px] md:text-xs font-semibold uppercase tracking-widest pl-1 sm:pl-2">Checkout</div>
                       ${state.activeGame.players.map(p => `
                         <div class="text-center font-bold text-xs sm:text-sm md:text-base text-emerald-500">
                           ${p.stats.checkouts}/${p.stats.checkoutAttempts}
                         </div>
                       `).join('')}
 
-                      <div class="text-slate-500 text-[8px] sm:text-[10px] md:text-xs font-semibold uppercase tracking-widest pl-1 sm:pl-2">Darts (Leg)</div>
+                      <div class="text-slate-500 text-[9px] sm:text-[10px] md:text-xs font-semibold uppercase tracking-widest pl-1 sm:pl-2">Darts (Leg)</div>
                       ${state.activeGame.players.map(p => {
                         const legDarts = p.history.reduce((sum, turn) => sum + turn.length, 0);
                         return `
@@ -1156,49 +1135,49 @@
                 </div>
 
                 <div class="w-full lg:w-[480px] xl:w-[520px] flex flex-col justify-end lg:justify-center shrink-0 mb-1 sm:mb-0 relative">
-                  <div class="bg-slate-900/80 p-2 sm:p-5 lg:p-6 rounded-t-2xl sm:rounded-t-3xl border-t border-x border-slate-800 flex justify-between items-center min-h-[48px] sm:min-h-[70px] lg:min-h-[100px]">
-                     <div class="flex items-center gap-1 sm:gap-2">
+                  <div class="bg-slate-900/80 p-3 sm:p-5 lg:p-6 rounded-t-2xl sm:rounded-t-3xl border-t border-x border-slate-800 flex justify-between items-center min-h-[60px] sm:min-h-[70px] lg:min-h-[100px]">
+                     <div class="flex items-center gap-1.5 sm:gap-2">
                         ${[0, 1, 2].map(idx => {
                           const dart = state.currentDarts[idx];
                           return `
-                            <div class="w-8 h-8 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-lg sm:rounded-2xl flex items-center justify-center text-[10px] sm:text-sm md:text-base lg:text-lg font-bold transition-all ${dart ? 'bg-indigo-600 text-white' : 'bg-slate-800 border border-slate-700 text-slate-500'}">
+                            <div class="w-10 h-10 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-xl sm:rounded-2xl flex items-center justify-center text-[11px] sm:text-sm md:text-base lg:text-lg font-bold transition-all ${dart ? 'bg-indigo-600 text-white' : 'bg-slate-800 border border-slate-700 text-slate-500'}">
                               ${dart ? formatDart(dart) : '-'}
                             </div>
                           `;
                         }).join('')}
-                        <div class="ml-2 sm:ml-4 text-center">
-                          <span class="block text-[8px] sm:text-[10px] lg:text-xs text-slate-500 uppercase font-semibold tracking-widest mb-0.5 sm:mb-1">Summe</span>
-                          <span class="font-bold text-lg sm:text-2xl lg:text-4xl text-white leading-none tracking-tighter">${roundTotal}</span>
+                        <div class="ml-3 sm:ml-4 text-center">
+                          <span class="block text-[9px] sm:text-[10px] lg:text-xs text-slate-500 uppercase font-semibold tracking-widest mb-0.5 sm:mb-1">Summe</span>
+                          <span class="font-bold text-xl sm:text-2xl lg:text-4xl text-white leading-none tracking-tighter">${roundTotal}</span>
                         </div>
                      </div>
 
                      ${checkoutRoute ? `
-                       <div class="text-right bg-emerald-900/20 px-2 sm:px-4 lg:px-5 py-1 sm:py-2.5 rounded-lg sm:rounded-2xl border border-emerald-800/50">
-                         <span class="block text-emerald-500 text-[8px] sm:text-[10px] lg:text-xs font-semibold uppercase tracking-widest mb-0.5 sm:mb-1">Weg</span>
+                       <div class="text-right bg-emerald-900/20 px-3 sm:px-4 lg:px-5 py-1.5 sm:py-2.5 rounded-xl sm:rounded-2xl border border-emerald-800/50">
+                         <span class="block text-emerald-500 text-[9px] sm:text-[10px] lg:text-xs font-semibold uppercase tracking-widest mb-0.5 sm:mb-1">Weg</span>
                          <span class="text-emerald-50 font-bold text-sm sm:text-sm md:text-base lg:text-lg tracking-tight">${checkoutRoute}</span>
                        </div>
                      ` : ''}
                   </div>
 
-                  <div class="bg-slate-900 p-2 sm:p-5 lg:p-8 rounded-b-2xl sm:rounded-b-3xl border border-slate-800 mt-[1px]">
+                  <div class="bg-slate-900 p-3 sm:p-5 lg:p-8 rounded-b-2xl sm:rounded-b-3xl border border-slate-800 mt-[1px]">
                     
-                    <div class="flex gap-1 sm:gap-2 mb-2 sm:mb-4 lg:mb-6 bg-slate-800 p-1 sm:p-1.5 rounded-xl sm:rounded-2xl border border-slate-700">
-                      <button onclick="setInputMultiplier(1)" class="flex-1 py-1.5 sm:py-3 lg:py-4 flex items-center justify-center rounded-lg sm:rounded-xl font-semibold text-[10px] sm:text-sm transition-all active:scale-95 ${state.inputMultiplier === 1 ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-slate-200'}">Einfach</button>
-                      <button onclick="setInputMultiplier(2)" class="flex-1 py-1.5 sm:py-3 lg:py-4 flex items-center justify-center rounded-lg sm:rounded-xl font-semibold text-[10px] sm:text-sm transition-all active:scale-95 ${state.inputMultiplier === 2 ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'}">Doppel</button>
-                      <button onclick="setInputMultiplier(3)" class="flex-1 py-1.5 sm:py-3 lg:py-4 flex items-center justify-center rounded-lg sm:rounded-xl font-semibold text-[10px] sm:text-sm transition-all active:scale-95 ${state.inputMultiplier === 3 ? 'bg-rose-600 text-white' : 'text-slate-400 hover:text-slate-200'}">Dreifach</button>
+                    <div class="flex gap-1.5 sm:gap-2 mb-3 sm:mb-4 lg:mb-6 bg-slate-800 p-1.5 sm:p-1.5 rounded-xl sm:rounded-2xl border border-slate-700">
+                      <button onclick="setInputMultiplier(1)" class="flex-1 py-2 sm:py-3 lg:py-4 flex items-center justify-center rounded-lg sm:rounded-xl font-semibold text-xs sm:text-sm transition-all active:scale-95 ${state.inputMultiplier === 1 ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-slate-200'}">Einfach</button>
+                      <button onclick="setInputMultiplier(2)" class="flex-1 py-2 sm:py-3 lg:py-4 flex items-center justify-center rounded-lg sm:rounded-xl font-semibold text-xs sm:text-sm transition-all active:scale-95 ${state.inputMultiplier === 2 ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'}">Doppel</button>
+                      <button onclick="setInputMultiplier(3)" class="flex-1 py-2 sm:py-3 lg:py-4 flex items-center justify-center rounded-lg sm:rounded-xl font-semibold text-xs sm:text-sm transition-all active:scale-95 ${state.inputMultiplier === 3 ? 'bg-rose-600 text-white' : 'text-slate-400 hover:text-slate-200'}">Dreifach</button>
                     </div>
 
-                    <div class="grid grid-cols-5 gap-1 sm:gap-2 lg:gap-3 mb-2 sm:mb-4 lg:mb-6">
+                    <div class="grid grid-cols-5 gap-1.5 sm:gap-2 lg:gap-3 mb-3 sm:mb-4 lg:mb-6">
                       ${Array.from({length: 20}, (_, i) => i + 1).map(num => `
-                        <button onclick="handleAddDart(${num})" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-slate-800 hover:bg-slate-700 flex items-center justify-center disabled:opacity-50 py-2.5 sm:py-4 lg:py-6 rounded-lg sm:rounded-2xl font-bold text-sm sm:text-xl lg:text-2xl transition-all active:scale-95 text-slate-200">${num}</button>
+                        <button onclick="handleAddDart(${num})" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-slate-800 hover:bg-slate-700 flex items-center justify-center disabled:opacity-50 py-3 sm:py-4 lg:py-6 rounded-xl sm:rounded-2xl font-bold text-lg sm:text-xl lg:text-2xl transition-all active:scale-95 text-slate-200">${num}</button>
                       `).join('')}
                     </div>
 
-                    <div class="grid grid-cols-4 gap-1 sm:gap-2 lg:gap-3">
-                      <button onclick="handleAddDart(0, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-slate-800 hover:bg-slate-700 flex items-center justify-center py-2.5 sm:py-4 rounded-lg sm:rounded-2xl font-semibold text-[9px] sm:text-xs lg:text-sm disabled:opacity-50 transition-transform active:scale-95 text-slate-400">Vorbei</button>
-                      <button onclick="handleAddDart(25, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-emerald-900/30 hover:bg-emerald-900/50 flex items-center justify-center py-2.5 sm:py-4 rounded-lg sm:rounded-2xl font-semibold text-[9px] sm:text-xs lg:text-sm disabled:opacity-50 transition-transform active:scale-95 text-emerald-400">Bull</button>
-                      <button onclick="handleAddDart(25, 2)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-rose-900/30 hover:bg-rose-900/50 flex items-center justify-center py-2.5 sm:py-4 rounded-lg sm:rounded-2xl font-semibold text-[9px] sm:text-xs lg:text-sm disabled:opacity-50 transition-transform active:scale-95 text-rose-400">D-Bull</button>
-                      <button onclick="handleUndoDart()" ${state.currentDarts.length === 0 ? 'disabled' : ''} class="bg-slate-800 hover:bg-slate-700 flex items-center justify-center py-2.5 sm:py-4 rounded-lg sm:rounded-2xl font-semibold text-[9px] sm:text-xs lg:text-sm disabled:opacity-50 transition-transform active:scale-95 text-slate-300">⌫ Rückgängig</button>
+                    <div class="grid grid-cols-4 gap-1.5 sm:gap-2 lg:gap-3">
+                      <button onclick="handleAddDart(0, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-slate-800 hover:bg-slate-700 flex items-center justify-center py-3 sm:py-4 rounded-xl sm:rounded-2xl font-semibold text-[11px] sm:text-xs lg:text-sm disabled:opacity-50 transition-transform active:scale-95 text-slate-400">Vorbei</button>
+                      <button onclick="handleAddDart(25, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-emerald-900/30 hover:bg-emerald-900/50 flex items-center justify-center py-3 sm:py-4 rounded-xl sm:rounded-2xl font-semibold text-[11px] sm:text-xs lg:text-sm disabled:opacity-50 transition-transform active:scale-95 text-emerald-400">Bull</button>
+                      <button onclick="handleAddDart(25, 2)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-rose-900/30 hover:bg-rose-900/50 flex items-center justify-center py-3 sm:py-4 rounded-xl sm:rounded-2xl font-semibold text-[11px] sm:text-xs lg:text-sm disabled:opacity-50 transition-transform active:scale-95 text-rose-400">D-Bull</button>
+                      <button onclick="handleUndoDart()" ${state.currentDarts.length === 0 ? 'disabled' : ''} class="bg-slate-800 hover:bg-slate-700 flex items-center justify-center py-3 sm:py-4 rounded-xl sm:rounded-2xl font-semibold text-[11px] sm:text-xs lg:text-sm disabled:opacity-50 transition-transform active:scale-95 text-slate-300">⌫ Rückgängig</button>
                     </div>
                   </div>
                 </div>
@@ -1207,7 +1186,6 @@
             return html;
         }
 
-        // Start App
         initApp();
     </script>
 </body>
