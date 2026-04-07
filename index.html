@@ -9,20 +9,16 @@
     <meta name="color-scheme" content="dark">
     <meta name="theme-color" content="#020617">
     
-    <!-- Web App Manifest (Inline via Data-URI) für Android Standalone-Modus -->
     <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Dart%20Tracker%22%2C%22short_name%22%3A%22Dart%22%2C%22display%22%3A%22standalone%22%2C%22start_url%22%3A%22.%22%2C%22background_color%22%3A%22%23020617%22%2C%22theme_color%22%3A%22%23020617%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%3Bcharset%3Dutf8%2C%253Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%253E%253Ccircle%20cx%3D%2750%27%20cy%3D%2750%27%20r%3D%2750%27%20fill%3D%27%25230f172a%27%2F%253E%253Ccircle%20cx%3D%2750%27%20cy%3D%2750%27%20r%3D%2710%27%20fill%3D%27%2523ef4444%27%2F%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D">
     
     <title>Dart Tracker</title>
     
-    <!-- Tailwind CSS (CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800;900&display=swap" rel="stylesheet">
     
-    <!-- Tailwind Config & Custom CSS -->
     <script>
         tailwind.config = {
             theme: { extend: { fontFamily: { sans: ['Outfit', 'sans-serif'] } } }
@@ -77,7 +73,8 @@
             isCoinFlipping: false,
             coinWinner: null,
             bullOff: { order: [], currentTurn: 0, hits: {}, winner: null, isTie: false },
-            turnNotification: null
+            turnNotification: null,
+            turnTimeoutId: null
         };
 
         const dbHelper = {
@@ -114,7 +111,7 @@
         function setState(updates) {
             state = { ...state, ...updates };
             
-            const { isDbLoaded, errorMsg, currentDarts, inputMultiplier, isCoinFlipping, turnNotification, ...persistentState } = state;
+            const { isDbLoaded, errorMsg, currentDarts, inputMultiplier, isCoinFlipping, turnNotification, turnTimeoutId, ...persistentState } = state;
             if (state.isDbLoaded) dbHelper.save(persistentState);
             
             render();
@@ -126,7 +123,7 @@
         async function initApp() {
             const savedState = await dbHelper.load();
             if (savedState) {
-                state = { ...state, ...savedState, isDbLoaded: true, currentDarts: [], inputMultiplier: 1, turnNotification: null };
+                state = { ...state, ...savedState, isDbLoaded: true, currentDarts: [], inputMultiplier: 1, turnNotification: null, turnTimeoutId: null };
             } else {
                 state.isDbLoaded = true;
             }
@@ -259,7 +256,7 @@
         });
 
         window.resetApp = () => {
-            setState({ view: 'SETUP', rounds: [], leagueMatches: [], activeGame: null, currentDarts: [], inputMultiplier: 1, turnNotification: null, ...resetWizardStates() });
+            setState({ view: 'SETUP', rounds: [], leagueMatches: [], activeGame: null, currentDarts: [], inputMultiplier: 1, turnNotification: null, turnTimeoutId: null, ...resetWizardStates() });
         };
 
         const generateBracketRound = (participants) => {
@@ -279,7 +276,7 @@
             if (state.appMode === 'TOURNAMENT' && state.players.length < 2) { setState({errorMsg: 'Für ein Turnier werden mindestens 2 Spieler benötigt.'}); return; }
             if (state.appMode === 'LEAGUE' && state.players.length < 2) { setState({errorMsg: 'Für eine Liga werden mindestens 2 Spieler benötigt.'}); return; }
             
-            let updates = { errorMsg: '', turnNotification: null, ...resetWizardStates() };
+            let updates = { errorMsg: '', turnNotification: null, turnTimeoutId: null, ...resetWizardStates() };
 
             if (state.appMode === 'TOURNAMENT') {
                 const shuffled = [...state.players].sort(() => Math.random() - 0.5);
@@ -297,7 +294,7 @@
                 updates.view = 'LEAGUE_HUB';
             } else {
                 const matchPlayers = state.players.map(p => ({ ...p, score: state.gameMode, history: [], legsWon: 0, setsWon: 0, stats: getDefaultStats() }));
-                updates.activeGame = { mode: 'STANDARD', matchId: 'standard', matchFormat: state.matchFormat, targetLegs: state.targetLegs, targetSets: state.targetSets, players: matchPlayers, currentPlayerIndex: 0, startingPlayerIndex: 0 };
+                updates.activeGame = { mode: 'STANDARD', matchId: 'standard', matchFormat: state.matchFormat, targetLegs: state.targetLegs, targetSets: state.targetSets, players: matchPlayers, currentPlayerIndex: 0, startingPlayerIndex: 0, snapshotStack: [] };
                 updates.view = 'DECIDE_STARTER';
             }
             setState(updates);
@@ -317,9 +314,9 @@
                         { ...match.player1, score: state.gameMode, history: [], legsWon: 0, setsWon: 0, stats: getDefaultStats() },
                         { ...match.player2, score: state.gameMode, history: [], legsWon: 0, setsWon: 0, stats: getDefaultStats() }
                     ],
-                    currentPlayerIndex: 0, startingPlayerIndex: 0
+                    currentPlayerIndex: 0, startingPlayerIndex: 0, snapshotStack: []
                 },
-                currentDarts: [], inputMultiplier: 1, turnNotification: null, view: 'DECIDE_STARTER', ...resetWizardStates()
+                currentDarts: [], inputMultiplier: 1, turnNotification: null, turnTimeoutId: null, view: 'DECIDE_STARTER', ...resetWizardStates()
             });
         };
 
@@ -423,14 +420,14 @@
             }
 
             if (isBust || isWin || state.currentDarts.length === 3) {
-                setState({ currentDarts: state.currentDarts }); 
-                
                 if (isBust || isWin) {
+                    setState({ currentDarts: state.currentDarts });
                     processTurn();
                 } else {
-                    setTimeout(() => {
+                    const tid = setTimeout(() => {
                         processTurn();
                     }, 600);
+                    setState({ currentDarts: state.currentDarts, turnTimeoutId: tid });
                 }
             } else {
                 setState({ currentDarts: state.currentDarts });
@@ -438,13 +435,43 @@
         };
 
         window.handleUndoDart = () => {
-            setState({ currentDarts: state.currentDarts.slice(0, -1) });
+            if (state.turnTimeoutId) {
+                clearTimeout(state.turnTimeoutId);
+                setState({ turnTimeoutId: null, currentDarts: state.currentDarts.slice(0, -1) });
+                return;
+            }
+
+            if (state.currentDarts.length > 0) {
+                setState({ currentDarts: state.currentDarts.slice(0, -1) });
+            } else if (state.activeGame && state.activeGame.snapshotStack && state.activeGame.snapshotStack.length > 0) {
+                // Restore state globally across multiple turns
+                const snap = state.activeGame.snapshotStack.pop();
+                const previousGame = JSON.parse(snap.game);
+                previousGame.snapshotStack = state.activeGame.snapshotStack;
+                
+                setState({ 
+                    activeGame: previousGame, 
+                    currentDarts: snap.darts.slice(0, -1),
+                    turnNotification: null
+                });
+            }
         };
 
         const processTurn = () => {
             if (!state.activeGame || state.currentDarts.length === 0) return;
 
+            // --- SNAPSHOT GENERIERUNG FÜR GLOBAL-UNDO ---
+            const snapshotGame = JSON.parse(JSON.stringify(state.activeGame));
+            snapshotGame.snapshotStack = null; // Verhindert exponentielles Speicherwachstum
+            const snap = {
+                game: JSON.stringify(snapshotGame),
+                darts: [...state.currentDarts]
+            };
             const activeGame = state.activeGame;
+            activeGame.snapshotStack = activeGame.snapshotStack || [];
+            activeGame.snapshotStack.push(snap);
+            // --------------------------------------------
+
             const currentPlayer = activeGame.players[activeGame.currentPlayerIndex];
             const playerToUpdate = JSON.parse(JSON.stringify(currentPlayer)); 
 
@@ -529,7 +556,7 @@
                     const p1Score = activeGame.matchFormat === 'SETS' ? updatedPlayers[0].setsWon : updatedPlayers[0].legsWon;
                     const p2Score = activeGame.players.length > 1 ? (activeGame.matchFormat === 'SETS' ? updatedPlayers[1].setsWon : updatedPlayers[1].legsWon) : 0;
                     
-                    let updates = { activeGame: { ...activeGame, players: updatedPlayers }, view: 'MATCH_STATS', currentDarts: [], inputMultiplier: 1 };
+                    let updates = { activeGame: { ...activeGame, players: updatedPlayers }, view: 'MATCH_STATS', currentDarts: [], inputMultiplier: 1, turnTimeoutId: null };
 
                     if (activeGame.mode === 'TOURNAMENT') {
                         const updatedRounds = JSON.parse(JSON.stringify(state.rounds));
@@ -549,7 +576,7 @@
                     setState({ 
                         activeGame: { ...activeGame, players: updatedPlayers, startingPlayerIndex: nextStarter, currentPlayerIndex: nextStarter },
                         turnNotification: { type: setWon ? 'SET_WON' : 'LEG_WON', playerName: playerToUpdate.name },
-                        currentDarts: [], inputMultiplier: 1
+                        currentDarts: [], inputMultiplier: 1, turnTimeoutId: null
                     });
                 }
                 return;
@@ -557,7 +584,7 @@
 
             setState({ 
                 activeGame: { ...activeGame, players: updatedPlayers, currentPlayerIndex: (activeGame.currentPlayerIndex + 1) % activeGame.players.length },
-                currentDarts: [], inputMultiplier: 1, turnNotification: newTurnNotification
+                currentDarts: [], inputMultiplier: 1, turnNotification: newTurnNotification, turnTimeoutId: null
             });
         };
 
@@ -1076,8 +1103,7 @@
             html += `
               <div class="max-w-6xl mx-auto w-full flex-1 flex flex-col lg:flex-row gap-3 lg:gap-12 justify-between h-full">
                 
-                <!-- Linke Spalte (PC) / Oben (Mobile): Header & Scores -->
-                <div class="flex-1 flex flex-col justify-start lg:justify-center w-full lg:max-w-2xl">
+                <div class="flex-1 min-w-0 flex flex-col justify-start lg:justify-center w-full lg:max-w-2xl">
                   <div class="flex justify-between items-center mb-2 sm:mb-3 px-1 sm:px-2">
                      <div class="flex flex-col">
                        <span class="text-xs sm:text-sm md:text-base font-black text-slate-300 tracking-tight">${state.gameMode} • ${state.outMode}</span>
@@ -1100,7 +1126,7 @@
                             ${state.activeGame.matchFormat === 'SETS' ? `<span>S: <span class="text-slate-200">${p.setsWon}</span></span>` : ''}
                             <span>L: <span class="text-slate-200">${p.legsWon}</span></span>
                           </div>
-                          <p class="text-5xl sm:text-6xl md:text-8xl lg:text-9xl font-black leading-none tracking-tighter ${isActive ? 'text-white' : 'text-slate-300'}">${p.score}</p>
+                          <p class="text-5xl sm:text-6xl md:text-8xl lg:text-9xl font-black leading-none tracking-tighter tabular-nums ${isActive ? 'text-white' : 'text-slate-300'}">${isActive ? projectedScore : p.score}</p>
                         </div>`;
                     }).join('')}
                   </div>
@@ -1141,7 +1167,6 @@
                   </div>
                 </div>
 
-                <!-- Rechte Spalte (PC) / Unten (Mobile): Input -->
                 <div class="w-full lg:w-[450px] flex flex-col justify-end lg:justify-center mt-auto shrink-0 mb-1 sm:mb-0">
                   <div class="bg-slate-800 p-2 sm:p-3 lg:p-4 rounded-t-2xl sm:rounded-t-3xl border-t border-x border-slate-700 flex justify-between items-center min-h-[48px] sm:min-h-[70px] lg:min-h-[85px]">
                      <div class="flex items-center gap-1 sm:gap-2">
@@ -1155,7 +1180,7 @@
                         }).join('')}
                         <div class="ml-2 sm:ml-3 text-center">
                           <span class="block text-[8px] sm:text-[9px] lg:text-[10px] text-slate-400 uppercase font-black tracking-widest">Sum</span>
-                          <span class="font-black text-xl sm:text-2xl lg:text-3xl text-white leading-none tracking-tighter">${roundTotal}</span>
+                          <span class="font-black text-xl sm:text-2xl lg:text-3xl text-white leading-none tracking-tighter tabular-nums">${roundTotal}</span>
                         </div>
                      </div>
 
@@ -1184,7 +1209,7 @@
                       <button onclick="handleAddDart(0, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-slate-900 flex items-center justify-center active:bg-slate-700 py-2 sm:py-3.5 lg:py-5 rounded-xl sm:rounded-2xl font-black text-[9px] sm:text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95 text-slate-400 border border-slate-700">Miss</button>
                       <button onclick="handleAddDart(25, 1)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-emerald-900/40 flex items-center justify-center border border-emerald-700/50 active:bg-emerald-800 text-emerald-300 py-2 sm:py-3.5 lg:py-5 rounded-xl sm:rounded-2xl font-black text-[9px] sm:text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95">25</button>
                       <button onclick="handleAddDart(25, 2)" ${state.currentDarts.length >= 3 ? 'disabled' : ''} class="bg-rose-900/40 flex items-center justify-center border border-rose-700/50 active:bg-rose-800 text-rose-300 py-2 sm:py-3.5 lg:py-5 rounded-xl sm:rounded-2xl font-black text-[9px] sm:text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95">Bullseye</button>
-                      <button onclick="handleUndoDart()" ${state.currentDarts.length === 0 ? 'disabled' : ''} class="bg-slate-700 flex items-center justify-center active:bg-slate-600 text-slate-300 py-2 sm:py-3.5 lg:py-5 rounded-xl sm:rounded-2xl font-black text-[9px] sm:text-xs md:text-sm lg:text-base disabled:opacity-50 transition-transform active:scale-95">⌫ Undo</button>
+                      <button onclick="handleUndoDart()" class="bg-slate-700 flex items-center justify-center active:bg-slate-600 text-slate-300 py-2 sm:py-3.5 lg:py-5 rounded-xl sm:rounded-2xl font-black text-[9px] sm:text-xs md:text-sm lg:text-base transition-transform active:scale-95 ${(state.currentDarts.length === 0 && (!state.activeGame || !state.activeGame.snapshotStack || state.activeGame.snapshotStack.length === 0)) ? 'opacity-50' : ''}">⌫ Undo</button>
                     </div>
                   </div>
                 </div>
